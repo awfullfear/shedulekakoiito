@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Расписание МАБиУ</title>
+
+  <!-- PWA & Mobile Web App Meta -->
+  <meta name="application-name" content="Расписание МАБиУ">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Расписание">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="Расписание занятий МАБиУ с таймером пар и автообновлением с Яндекс.Диска">
+
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.json">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="brand-section">
+        <span class="brand-title">МАБиУ · Расписание</span>
+        <button id="groupSelectorBtn" class="group-selector-btn" type="button" aria-label="Выбрать группу">
+          <span id="currentGroupLabel">ЛОМО26/СО</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+      <div class="header-actions">
+        <button id="refreshBtn" class="icon-btn" type="button" title="Обновить с Яндекс.Диска" aria-label="Обновить расписание">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+          </svg>
+        </button>
+        <button id="settingsBtn" class="icon-btn" type="button" title="Настройки и файлы" aria-label="Настройки">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Live Status Banner & Countdown -->
+    <div class="status-banner-container">
+      <div id="statusBanner" class="status-banner">
+        <div id="statusIconBox" class="status-icon-box">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <div class="status-content">
+          <div id="statusBadge" class="status-badge">Загрузка...</div>
+          <div id="statusTitle" class="status-title">Проверка расписания</div>
+          <div id="statusSubtitle" class="status-subtitle">Пожалуйста, подождите</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Days Navigation Bar & Carousel -->
+    <div class="days-section">
+      <div class="month-bar">
+        <span id="monthLabel" class="month-label">Октябрь 2026</span>
+        <button id="todayJumpBtn" class="today-jump-btn" type="button">Сегодня</button>
+      </div>
+      <div id="daysCarousel" class="days-carousel">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </div>
+
+    <!-- Schedule Lessons Container -->
+    <main id="scheduleContainer" class="schedule-container">
+      <div class="day-heading">
+        <span id="dayHeadingText">Понедельник, 26 октября</span>
+        <span id="dayBadgeToday" class="day-badge-today" style="display: none;">Сегодня</span>
+      </div>
+      <div id="lessonsList">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </main>
+
+    <!-- Group Selection Modal Sheet -->
+    <div id="groupModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="groupModalTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2 id="groupModalTitle" class="modal-title">Выбор группы (26 набор)</h2>
+          <button id="closeGroupModalBtn" class="close-btn" type="button" aria-label="Закрыть">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <input type="text" id="groupSearchInput" class="search-input" placeholder="Поиск группы (например: ЛОМО)..." autocomplete="off" autocapitalize="none">
+        <div id="groupList" class="group-list">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings & Manual Upload Modal Sheet -->
+    <div id="settingsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2 id="settingsModalTitle" class="modal-title">Настройки и файлы</h2>
+          <button id="closeSettingsModalBtn" class="close-btn" type="button" aria-label="Закрыть">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Manual File Upload -->
+        <div class="settings-section">
+          <div class="settings-section-title">Ручная загрузка XLSX</div>
+          <input type="file" id="xlsxFileInput" accept=".xlsx,.xls" style="display: none;">
+          <div id="dropzone" class="file-dropzone" role="button" tabindex="0">
+            <svg class="file-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <div class="file-dropzone-text">Нажмите или перетащите файл .xlsx</div>
+            <div class="file-dropzone-subtext">Файл будет разобран прямо на телефоне</div>
+          </div>
+        </div>
+
+        <!-- Yandex Disk Sync -->
+        <div class="settings-section">
+          <div class="settings-section-title">Синхронизация с Яндекс.Диском</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <span>Источник:</span>
+              <strong id="diskSourceLabel" style="font-size: 12px; color: var(--primary);">7XafcYMVe1ec7g</strong>
+            </div>
+            <div class="settings-row">
+              <span>Файл:</span>
+              <span id="currentFileName" style="font-size: 13px;">26.10-31.10.xlsx</span>
+            </div>
+            <div class="settings-row">
+              <span>Обновлено:</span>
+              <span id="lastUpdatedLabel" style="font-size: 12px; color: var(--text-muted);">-</span>
+            </div>
+            <button id="syncNowBtn" class="settings-btn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+              Проверить Яндекс.Диск сейчас
+            </button>
+            <button id="resetScheduleBtn" class="settings-btn secondary" type="button">
+              Сбросить к исходному расписанию
+            </button>
+          </div>
+        </div>
+
+        <!-- Info / Add to Home screen tip -->
+        <div class="settings-info-text">
+          💡 <strong>Для iPhone:</strong> Нажмите кнопку «Поделиться» (квадрат со стрелкой вверх) в Safari и выберите <strong>«На экран Домой»</strong>, чтобы открывать расписание как приложение без рамок браузера.
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast" role="alert" aria-live="polite">Сообщение</div>
+  </div>
+
+  <!-- SheetJS for local parsing of .xlsx on client -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Main Application Logic -->
+  <script src="./app.js"></script>
+</body>
+</html>

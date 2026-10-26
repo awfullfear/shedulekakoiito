@@ -1,0 +1,13 @@
+{
+  "name": "mabiu-schedule-web",
+  "version": "1.0.0",
+  "description": "Веб-версия расписания МАБИУ для iPhone и всех устройств",
+  "main": "api/schedule.js",
+  "scripts": {
+    "start": "serve ."
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "node-fetch": "^2.6.7"
+  }
+}
