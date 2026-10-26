@@ -18,8 +18,17 @@ const CONFIG = {
   corsProxy: 'https://api.allorigins.win/raw?url='
 };
 
+const THEMES = [
+  { id: 'blue', name: 'Океан 🌊' },
+  { id: 'emerald', name: 'Изумруд 🌿' },
+  { id: 'violet', name: 'Аметист 🔮' },
+  { id: 'rose', name: 'Сакура 🌸' },
+  { id: 'halloween', name: 'Хэллоуин 🎃' }
+];
+
 let scheduleData = null;
 let currentGroup = localStorage.getItem('mabiu_group') || CONFIG.defaultGroup;
+let currentTheme = localStorage.getItem('mabiu_theme') || 'blue';
 let selectedDateStr = getTodayDateStr();
 let tickerTimerId = null;
 
@@ -28,6 +37,9 @@ const currentGroupLabel = document.getElementById('currentGroupLabel');
 const groupSelectorBtn = document.getElementById('groupSelectorBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const settingsBtn = document.getElementById('settingsBtn');
+const themeBtn = document.getElementById('themeBtn');
+const halloweenHeaderPumpkin = document.getElementById('halloweenHeaderPumpkin');
+const themeGrid = document.getElementById('themeGrid');
 
 const statusBanner = document.getElementById('statusBanner');
 const statusIconBox = document.getElementById('statusIconBox');
@@ -117,9 +129,56 @@ function formatDuration(diffMs) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+// --- Themes Management ---
+
+function applyTheme(themeId, notify = false) {
+  currentTheme = themeId;
+  localStorage.setItem('mabiu_theme', themeId);
+  document.documentElement.setAttribute('data-theme', themeId);
+
+  // Update theme buttons in settings
+  if (themeGrid) {
+    themeGrid.querySelectorAll('.theme-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.theme === themeId);
+    });
+  }
+
+  // Header pumpkin toggle
+  if (halloweenHeaderPumpkin) {
+    halloweenHeaderPumpkin.style.display = (themeId === 'halloween') ? 'inline' : 'none';
+  }
+
+  // Update status icon box for Halloween
+  if (statusIconBox) {
+    if (themeId === 'halloween') {
+      statusIconBox.innerHTML = '<span style="font-size: 24px; line-height: 1;">🎃</span>';
+    } else {
+      statusIconBox.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      `;
+    }
+  }
+
+  if (notify) {
+    const found = THEMES.find(t => t.id === themeId);
+    const themeName = found ? found.name : themeId;
+    showToast(`Тема: ${themeName}`);
+  }
+}
+
+function cycleTheme() {
+  const currentIndex = THEMES.findIndex(t => t.id === currentTheme);
+  const nextIndex = (currentIndex + 1) % THEMES.length;
+  applyTheme(THEMES[nextIndex].id, true);
+}
+
 // --- Data Loading & Persistence ---
 
 async function initApp() {
+  applyTheme(currentTheme, false);
   currentGroupLabel.textContent = currentGroup;
   if (diskSourceLabel) diskSourceLabel.textContent = CONFIG.yandexKeyId;
 
@@ -1114,6 +1173,19 @@ function setupEventListeners() {
   todayJumpBtn.addEventListener('click', () => {
     selectDay(getTodayDateStr());
   });
+
+  // Themes
+  if (themeBtn) {
+    themeBtn.addEventListener('click', cycleTheme);
+  }
+  if (themeGrid) {
+    themeGrid.querySelectorAll('.theme-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tId = btn.dataset.theme;
+        if (tId) applyTheme(tId, true);
+      });
+    });
+  }
 
   setupDropzone();
   setupSwipeGestures();

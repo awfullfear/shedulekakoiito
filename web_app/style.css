@@ -29,6 +29,62 @@
   --radius-sm: 8px;
 }
 
+/* Emerald Theme (Мята / Изумруд) */
+[data-theme="emerald"] {
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-light: rgba(5, 150, 105, 0.12);
+  --primary-container: #d1fae5;
+  --on-primary-container: #065f46;
+}
+
+/* Violet Theme (Аметист) */
+[data-theme="violet"] {
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9;
+  --primary-light: rgba(124, 58, 237, 0.12);
+  --primary-container: #ede9fe;
+  --on-primary-container: #5b21b6;
+}
+
+/* Rose Theme (Сакура) */
+[data-theme="rose"] {
+  --primary: #e11d48;
+  --primary-hover: #be123c;
+  --primary-light: rgba(225, 29, 72, 0.12);
+  --primary-container: #ffe4e6;
+  --on-primary-container: #9f1239;
+}
+
+/* Halloween Theme 🎃 (Мистическая тыква) */
+[data-theme="halloween"] {
+  --primary: #f97316;
+  --primary-hover: #ea580c;
+  --primary-light: rgba(249, 115, 22, 0.18);
+  --primary-container: #431407;
+  --on-primary-container: #ffedd5;
+
+  --bg: #0c0814;
+  --surface: #160f24;
+  --surface-variant: #211636;
+  --border: #32204d;
+
+  --text-main: #f8fafc;
+  --text-muted: #c084fc;
+
+  --badge-lecture-bg: rgba(249, 115, 22, 0.18);
+  --badge-lecture-text: #fb923c;
+  --badge-practice-bg: rgba(168, 85, 247, 0.18);
+  --badge-practice-text: #c084fc;
+  --badge-seminar-bg: rgba(234, 88, 12, 0.2);
+  --badge-seminar-text: #fdba74;
+  --badge-lab-bg: rgba(217, 70, 239, 0.2);
+  --badge-lab-text: #e879f9;
+
+  --joint-bg: rgba(234, 179, 8, 0.16);
+  --joint-text: #facc15;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0b0f19;
@@ -54,6 +110,43 @@
 
     --joint-bg: rgba(245, 158, 11, 0.16);
     --joint-text: #fbbf24;
+  }
+
+  [data-theme="emerald"] {
+    --primary: #10b981;
+    --primary-hover: #059669;
+    --primary-light: rgba(16, 185, 129, 0.18);
+    --primary-container: #064e3b;
+    --on-primary-container: #a7f3d0;
+  }
+
+  [data-theme="violet"] {
+    --primary: #a78bfa;
+    --primary-hover: #8b5cf6;
+    --primary-light: rgba(167, 139, 250, 0.18);
+    --primary-container: #4c1d95;
+    --on-primary-container: #ddd6fe;
+  }
+
+  [data-theme="rose"] {
+    --primary: #fb7185;
+    --primary-hover: #f43f5e;
+    --primary-light: rgba(251, 113, 133, 0.18);
+    --primary-container: #881337;
+    --on-primary-container: #fecdd3;
+  }
+
+  [data-theme="halloween"] {
+    --bg: #0c0814;
+    --surface: #160f24;
+    --surface-variant: #211636;
+    --border: #32204d;
+    --text-main: #f8fafc;
+    --text-muted: #c084fc;
+    --primary: #f97316;
+    --primary-light: rgba(249, 115, 22, 0.22);
+    --primary-container: #431407;
+    --on-primary-container: #ffedd5;
   }
 }
 
@@ -741,3 +834,133 @@ header {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
 }
+
+/* Theme Grid & Buttons */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.theme-btn {
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-main);
+}
+
+.theme-btn:active {
+  transform: scale(0.95);
+}
+
+.theme-btn.active {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  transform: scale(1.04);
+}
+
+.theme-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-swatch-pumpkin {
+  background: transparent !important;
+  box-shadow: none;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.theme-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Halloween Spooky Decorations */
+.halloween-decorations {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+[data-theme="halloween"] .halloween-decorations {
+  display: block;
+}
+
+.spooky-item {
+  position: absolute;
+  user-select: none;
+  opacity: 0.65;
+  filter: drop-shadow(0 2px 8px rgba(249, 115, 22, 0.35));
+}
+
+.pumpkin-top-right {
+  top: 75px;
+  right: 14px;
+  font-size: 26px;
+  animation: floatSpooky 4s ease-in-out infinite;
+}
+
+.pumpkin-bottom-left {
+  bottom: 80px;
+  left: 12px;
+  font-size: 28px;
+  animation: floatSpooky 5s ease-in-out infinite reverse;
+}
+
+.bat-mid-left {
+  top: 260px;
+  left: 8px;
+  font-size: 20px;
+  opacity: 0.45;
+  animation: batFlutter 6s ease-in-out infinite;
+}
+
+.ghost-bottom-right {
+  bottom: 120px;
+  right: 14px;
+  font-size: 22px;
+  opacity: 0.45;
+  animation: floatSpooky 4.5s ease-in-out infinite 1s;
+}
+
+@keyframes floatSpooky {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(6deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes batFlutter {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(8px, -14px) scale(1.08); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+[data-theme="halloween"] .status-banner {
+  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.16);
+  border-color: rgba(249, 115, 22, 0.35);
+}
+
+[data-theme="halloween"] .day-pill.active {
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
+}
+
