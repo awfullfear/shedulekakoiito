@@ -58,7 +58,7 @@ const THEMES = [
 
 let scheduleData = null;
 let currentGroup = localStorage.getItem('mabiu_group') || CONFIG.defaultGroup;
-let currentTheme = localStorage.getItem('mabiu_theme') || 'blue';
+let currentTheme = localStorage.getItem('mabiu_theme') || 'halloween';
 let selectedDateStr = getTodayDateStr();
 let tickerTimerId = null;
 
@@ -315,7 +315,25 @@ async function initApp() {
   renderLessons();
   startLiveTicker();
 
-  // Background check for updates from Yandex.Disk
+  // 4. Background check for fresh data/schedule.json from repository
+  fetch(`./data/schedule.json?_t=${Date.now()}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(freshBundled => {
+      if (freshBundled && freshBundled.groups && freshBundled.lastUpdated) {
+        if (!scheduleData || freshBundled.lastUpdated > (scheduleData.lastUpdated || 0) || freshBundled.fileName !== scheduleData.fileName) {
+          scheduleData = freshBundled;
+          localStorage.setItem('mabiu_schedule_data', JSON.stringify(freshBundled));
+          updateSettingsLabels();
+          setupDaysCarousel();
+          renderLessons();
+          updateTickerOnce();
+          showToast(`Расписание обновлено: ${freshBundled.fileName}`);
+        }
+      }
+    })
+    .catch(() => {});
+
+  // 5. Background direct check for new .xlsx on Yandex.Disk
   checkYandexDiskUpdates(false);
 }
 
@@ -1281,6 +1299,21 @@ function setupEventListeners() {
 
   setupDropzone();
   setupSwipeGestures();
+
+  // Auto-check for updates when tab becomes visible or app is unlocked
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkYandexDiskUpdates(false);
+    }
+  });
+  window.addEventListener('focus', () => {
+    checkYandexDiskUpdates(false);
+  });
+
+  // Background auto-check every 15 minutes
+  setInterval(() => {
+    checkYandexDiskUpdates(false);
+  }, 15 * 60 * 1000);
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
