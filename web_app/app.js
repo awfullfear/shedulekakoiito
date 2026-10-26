@@ -19,11 +19,41 @@ const CONFIG = {
 };
 
 const THEMES = [
-  { id: 'blue', name: 'Океан 🌊' },
-  { id: 'emerald', name: 'Изумруд 🌿' },
-  { id: 'violet', name: 'Аметист 🔮' },
-  { id: 'rose', name: 'Сакура 🌸' },
-  { id: 'halloween', name: 'Хэллоуин 🎃' }
+  {
+    id: 'blue',
+    name: 'Океан',
+    emoji: '🌊',
+    color: '#2563eb',
+    desc: 'Классическая синяя тема'
+  },
+  {
+    id: 'emerald',
+    name: 'Изумруд',
+    emoji: '🌿',
+    color: '#10b981',
+    desc: 'Мягкий природный зелёный цвет'
+  },
+  {
+    id: 'violet',
+    name: 'Аметист',
+    emoji: '🔮',
+    color: '#8b5cf6',
+    desc: 'Глубокий неоновый фиолетовый'
+  },
+  {
+    id: 'rose',
+    name: 'Сакура',
+    emoji: '🌸',
+    color: '#f43f5e',
+    desc: 'Нежный пастельный кораллово-розовый'
+  },
+  {
+    id: 'halloween',
+    name: 'Хэллоуин 🎃',
+    emoji: '🎃',
+    color: '#f97316',
+    desc: 'Мистическая ночь и летающие тыковки'
+  }
 ];
 
 let scheduleData = null;
@@ -40,6 +70,10 @@ const settingsBtn = document.getElementById('settingsBtn');
 const themeBtn = document.getElementById('themeBtn');
 const halloweenHeaderPumpkin = document.getElementById('halloweenHeaderPumpkin');
 const themeGrid = document.getElementById('themeGrid');
+
+const themeModal = document.getElementById('themeModal');
+const closeThemeModalBtn = document.getElementById('closeThemeModalBtn');
+const themeSelectList = document.getElementById('themeSelectList');
 
 const statusBanner = document.getElementById('statusBanner');
 const statusIconBox = document.getElementById('statusIconBox');
@@ -143,6 +177,13 @@ function applyTheme(themeId, notify = false) {
     });
   }
 
+  // Update theme choice items in theme modal
+  if (themeSelectList) {
+    themeSelectList.querySelectorAll('.theme-choice-item').forEach((item) => {
+      item.classList.toggle('active', item.dataset.theme === themeId);
+    });
+  }
+
   // Header pumpkin toggle
   if (halloweenHeaderPumpkin) {
     halloweenHeaderPumpkin.style.display = (themeId === 'halloween') ? 'inline' : 'none';
@@ -167,6 +208,49 @@ function applyTheme(themeId, notify = false) {
     const themeName = found ? found.name : themeId;
     showToast(`Тема: ${themeName}`);
   }
+}
+
+function openThemeModal() {
+  renderThemeSelectList();
+  if (themeModal) themeModal.classList.add('open');
+}
+
+function closeThemeModal() {
+  if (themeModal) themeModal.classList.remove('open');
+}
+
+function renderThemeSelectList() {
+  if (!themeSelectList) return;
+  themeSelectList.innerHTML = '';
+
+  THEMES.forEach((theme) => {
+    const isActive = (theme.id === currentTheme);
+    const item = document.createElement('div');
+    item.className = `theme-choice-item ${isActive ? 'active' : ''}`;
+    item.dataset.theme = theme.id;
+
+    item.innerHTML = `
+      <div class="theme-choice-left">
+        <span class="theme-choice-swatch" style="background: ${theme.color}22; border: 1px solid ${theme.color}44;">
+          ${theme.emoji}
+        </span>
+        <div class="theme-choice-info">
+          <div class="theme-choice-title">${theme.name}</div>
+          <div class="theme-choice-desc">${theme.desc}</div>
+        </div>
+      </div>
+      <svg class="theme-choice-check" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    `;
+
+    item.addEventListener('click', () => {
+      applyTheme(theme.id, true);
+      closeThemeModal();
+    });
+
+    themeSelectList.appendChild(item);
+  });
 }
 
 function cycleTheme() {
@@ -1174,9 +1258,17 @@ function setupEventListeners() {
     selectDay(getTodayDateStr());
   });
 
-  // Themes
+  // Themes Modal & Grid
   if (themeBtn) {
-    themeBtn.addEventListener('click', cycleTheme);
+    themeBtn.addEventListener('click', openThemeModal);
+  }
+  if (closeThemeModalBtn) {
+    closeThemeModalBtn.addEventListener('click', closeThemeModal);
+  }
+  if (themeModal) {
+    themeModal.addEventListener('click', (e) => {
+      if (e.target === themeModal) closeThemeModal();
+    });
   }
   if (themeGrid) {
     themeGrid.querySelectorAll('.theme-btn').forEach((btn) => {
