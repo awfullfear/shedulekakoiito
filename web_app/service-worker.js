@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mabiu-schedule-v1';
+const CACHE_NAME = 'mabiu-schedule-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,7 +9,8 @@ const ASSETS_TO_CACHE = [
   './icon-192.png',
   './icon-512.png',
   './apple-touch-icon.png',
-  './data/schedule.json'
+  './data/schedule.json',
+  './schedule.json'
 ];
 
 self.addEventListener('install', (event) => {

@@ -277,10 +277,11 @@ async function initApp() {
     }
   }
 
-  // 2. If no valid cache, load bundled data/schedule.json
+  // 2. If no valid cache, load bundled schedule.json (checks both ./schedule.json and ./data/schedule.json)
   if (!scheduleData) {
     try {
-      const resp = await fetch('./data/schedule.json');
+      let resp = await fetch('./schedule.json');
+      if (!resp.ok) resp = await fetch('./data/schedule.json');
       if (resp.ok) {
         scheduleData = await resp.json();
       }
@@ -315,23 +316,36 @@ async function initApp() {
   renderLessons();
   startLiveTicker();
 
-  // 4. Background check for fresh data/schedule.json from repository
-  fetch(`./data/schedule.json?_t=${Date.now()}`)
-    .then(r => r.ok ? r.json() : null)
-    .then(freshBundled => {
-      if (freshBundled && freshBundled.groups && freshBundled.lastUpdated) {
-        if (!scheduleData || freshBundled.lastUpdated > (scheduleData.lastUpdated || 0) || freshBundled.fileName !== scheduleData.fileName) {
-          scheduleData = freshBundled;
-          localStorage.setItem('mabiu_schedule_data', JSON.stringify(freshBundled));
-          updateSettingsLabels();
-          setupDaysCarousel();
-          renderLessons();
-          updateTickerOnce();
-          showToast(`Расписание обновлено: ${freshBundled.fileName}`);
-        }
+  // 4. Background check for fresh schedule.json from repository (checks both ./schedule.json and ./data/schedule.json)
+  (async () => {
+    try {
+      const candidates = ['./schedule.json', './data/schedule.json'];
+      let bestFresh = null;
+      for (const c of candidates) {
+        try {
+          const r = await fetch(`${c}?_t=${Date.now()}`);
+          if (r.ok) {
+            const j = await r.json();
+            if (j && j.groups && j.lastUpdated) {
+              if (!bestFresh || j.lastUpdated > bestFresh.lastUpdated) {
+                bestFresh = j;
+              }
+            }
+          }
+        } catch (_) {}
       }
-    })
-    .catch(() => {});
+
+      if (bestFresh && (!scheduleData || bestFresh.lastUpdated > (scheduleData.lastUpdated || 0) || bestFresh.fileName !== scheduleData.fileName)) {
+        scheduleData = bestFresh;
+        localStorage.setItem('mabiu_schedule_data', JSON.stringify(bestFresh));
+        updateSettingsLabels();
+        setupDaysCarousel();
+        renderLessons();
+        updateTickerOnce();
+        showToast(`Расписание обновлено: ${bestFresh.fileName}`);
+      }
+    } catch (_) {}
+  })();
 
   // 5. Background direct check for new .xlsx on Yandex.Disk
   checkYandexDiskUpdates(false);
@@ -1225,7 +1239,8 @@ async function resetSchedule() {
   localStorage.removeItem('mabiu_schedule_data');
   showToast('Сброс к исходному расписанию...');
   try {
-    const resp = await fetch('./data/schedule.json');
+    let resp = await fetch('./schedule.json');
+    if (!resp.ok) resp = await fetch('./data/schedule.json');
     if (resp.ok) {
       scheduleData = await resp.json();
       updateSettingsLabels();
