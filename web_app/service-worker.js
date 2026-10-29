@@ -1,16 +1,14 @@
-const CACHE_NAME = 'mabiu-schedule-v2';
+const CACHE_NAME = 'mabiu-schedule-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
+  './style.css?v=4',
+  './app.js?v=4',
   './manifest.json',
   './favicon.svg',
   './icon-192.png',
   './icon-512.png',
-  './apple-touch-icon.png',
-  './data/schedule.json',
-  './schedule.json'
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,8 +36,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // For API or live schedule requests: Network first, fall back to cache
-  if (url.pathname.includes('/api/schedule')) {
+  // Network-First for API and schedule.json: ALWAYS get latest schedule from network!
+  if (url.pathname.includes('/api/schedule') || url.pathname.includes('schedule.json')) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
@@ -54,7 +52,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For app shell and bundled data: Stale-While-Revalidate
+  // Stale-While-Revalidate for app shell
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request)

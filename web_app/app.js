@@ -266,11 +266,27 @@ async function initApp() {
   currentGroupLabel.textContent = currentGroup;
   if (diskSourceLabel) diskSourceLabel.textContent = CONFIG.yandexKeyId;
 
-  // 1. Try loading cached custom schedule from localStorage
+  // Clear stale service worker caches from window
+  if ('caches' in window) {
+    caches.keys().then((keys) => {
+      keys.forEach((k) => {
+        if (k === 'mabiu-schedule-v1' || k === 'mabiu-schedule-v2' || k === 'mabiu-schedule-v3') {
+          caches.delete(k);
+        }
+      });
+    }).catch(() => {});
+  }
+
+  // 1. Try loading cached custom schedule from localStorage (discard if it is the old Monday file)
   const cachedJson = localStorage.getItem('mabiu_schedule_data');
   if (cachedJson) {
     try {
-      scheduleData = JSON.parse(cachedJson);
+      const parsed = JSON.parse(cachedJson);
+      if (parsed && parsed.fileName && !parsed.fileName.includes('26.10') && parsed.schedules?.[currentGroup]?.days?.['2026-10-30']) {
+        scheduleData = parsed;
+      } else {
+        localStorage.removeItem('mabiu_schedule_data');
+      }
     } catch (e) {
       console.warn('Failed to parse cached schedule data, resetting:', e);
       localStorage.removeItem('mabiu_schedule_data');
@@ -280,10 +296,11 @@ async function initApp() {
   // 2. If no valid cache, load bundled schedule.json (checks both ./schedule.json and ./data/schedule.json)
   if (!scheduleData) {
     try {
-      let resp = await fetch('./schedule.json');
-      if (!resp.ok) resp = await fetch('./data/schedule.json');
+      let resp = await fetch(`./schedule.json?_t=${Date.now()}`);
+      if (!resp.ok) resp = await fetch(`./data/schedule.json?_t=${Date.now()}`);
       if (resp.ok) {
         scheduleData = await resp.json();
+        localStorage.setItem('mabiu_schedule_data', JSON.stringify(scheduleData));
       }
     } catch (err) {
       console.error('Failed to load bundled schedule.json:', err);
@@ -335,7 +352,14 @@ async function initApp() {
         } catch (_) {}
       }
 
-      if (bestFresh && (!scheduleData || bestFresh.lastUpdated > (scheduleData.lastUpdated || 0) || bestFresh.fileName !== scheduleData.fileName)) {
+      const shouldUpdate = bestFresh && (
+        !scheduleData ||
+        (bestFresh.lastUpdated && bestFresh.lastUpdated > (scheduleData.lastUpdated || 0)) ||
+        bestFresh.fileName !== scheduleData.fileName ||
+        (!scheduleData.schedules?.[currentGroup]?.days?.['2026-10-30'] && bestFresh.schedules?.[currentGroup]?.days?.['2026-10-30'])
+      );
+
+      if (shouldUpdate) {
         scheduleData = bestFresh;
         localStorage.setItem('mabiu_schedule_data', JSON.stringify(bestFresh));
         updateSettingsLabels();
@@ -902,7 +926,7 @@ function parseWorkbookClient(arrayBuffer, fileName) {
     let foundDow = null;
     let foundDowText = '';
 
-    for (let c = 0; c <= Math.min(2, range.e.c); c++) {
+    for (let c = 0; c <= Math.min(7, range.e.c); c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (!cell || cell.v === undefined || cell.v === null) continue;
 
@@ -982,7 +1006,7 @@ function parseWorkbookClient(arrayBuffer, fileName) {
 
     // Time cell in column 0 or 1
     let timeStr = '';
-    for (let c = 0; c <= Math.min(2, range.e.c); c++) {
+    for (let c = 0; c <= Math.min(7, range.e.c); c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (cell && cell.v) {
         const text = String(cell.w || cell.v).trim();
