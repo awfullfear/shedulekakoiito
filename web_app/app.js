@@ -1056,6 +1056,11 @@ function parseDateFromCellClient(cell) {
     const d = cell.v instanceof Date ? cell.v : new Date(cell.w || cell.v);
     return d.toISOString().split('T')[0];
   }
+  if (typeof cell.v === 'number' && cell.v > 40000 && cell.v < 60000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    excelEpoch.setUTCDate(excelEpoch.getUTCDate() + Math.floor(cell.v));
+    return excelEpoch.toISOString().split('T')[0];
+  }
   const text = String(cell.w || cell.v || '').trim();
   const m1 = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m1) return `${m1[1]}-${m1[2].padStart(2, '0')}-${m1[3].padStart(2, '0')}`;
@@ -1139,28 +1144,56 @@ async function checkYandexDiskUpdates(isManual = false) {
       // Local or static GitHub Pages fallback
     }
 
-    // 2. Fallback to direct Yandex API via public CORS proxy if /api/schedule not available
+    // 2. Direct Yandex API fetch or fallback to CORS proxy
     if (!fetchedData) {
       const yandexApi = `https://cloud-api.yandex.net/v1/disk/public/resources?public_key=${encodeURIComponent(CONFIG.yandexPublicKey)}&limit=100`;
-      const proxyUrl = CONFIG.corsProxy + encodeURIComponent(yandexApi);
-      const resp = await fetch(proxyUrl);
-      if (resp.ok) {
-        const rawJson = await resp.json();
-        const diskJson = typeof rawJson.contents === 'string' ? JSON.parse(rawJson.contents) : rawJson;
+      let diskJson = null;
 
+      try {
+        const resp = await fetch(yandexApi);
+        if (resp.ok) {
+          diskJson = await resp.json();
+        }
+      } catch (e) {
+        // Direct fetch failed, try cors proxy
+      }
+
+      if (!diskJson) {
+        try {
+          const proxyResp = await fetch(CONFIG.corsProxy + encodeURIComponent(yandexApi));
+          if (proxyResp.ok) {
+            const rawJson = await proxyResp.json();
+            diskJson = typeof rawJson.contents === 'string' ? JSON.parse(rawJson.contents) : rawJson;
+          }
+        } catch (_) {}
+      }
+
+      if (diskJson) {
         const items = diskJson._embedded?.items || [];
         const xlsxFiles = items.filter(it => it.name && it.name.match(/\.(xlsx|xls)$/i) && it.file);
         if (xlsxFiles.length > 0) {
-          // Sort latest file
           xlsxFiles.sort((a, b) => new Date(b.modified || 0) - new Date(a.modified || 0));
           const latestFile = xlsxFiles[0];
 
-          // Download latest xlsx
-          const fileResp = await fetch(CONFIG.corsProxy + encodeURIComponent(latestFile.file));
-          if (fileResp.ok) {
-            const rawBase64OrText = await fileResp.text();
-            // Convert to buffer or blob
-            const arrayBuffer = await fileResp.arrayBuffer();
+          // Download latest xlsx (try direct first, then proxy)
+          let arrayBuffer = null;
+          try {
+            const fileResp = await fetch(latestFile.file);
+            if (fileResp.ok) {
+              arrayBuffer = await fileResp.arrayBuffer();
+            }
+          } catch (_) {}
+
+          if (!arrayBuffer) {
+            try {
+              const fileResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(latestFile.file)}`);
+              if (fileResp.ok) {
+                arrayBuffer = await fileResp.arrayBuffer();
+              }
+            } catch (_) {}
+          }
+
+          if (arrayBuffer && arrayBuffer.byteLength > 0) {
             fetchedData = parseWorkbookClient(arrayBuffer, latestFile.name);
           }
         }
