@@ -270,19 +270,19 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k === 'mabiu-schedule-v1' || k === 'mabiu-schedule-v2' || k === 'mabiu-schedule-v3') {
+        if (k !== 'mabiu-schedule-v5') {
           caches.delete(k);
         }
       });
     }).catch(() => {});
   }
 
-  // 1. Try loading cached custom schedule from localStorage (discard if it is the old Monday file)
+  // 1. Try loading cached custom schedule from localStorage
   const cachedJson = localStorage.getItem('mabiu_schedule_data');
   if (cachedJson) {
     try {
       const parsed = JSON.parse(cachedJson);
-      if (parsed && parsed.fileName && !parsed.fileName.includes('26.10') && parsed.schedules?.[currentGroup]?.days?.['2026-10-30']) {
+      if (parsed && parsed.fileName && parsed.schedules && Object.keys(parsed.schedules).length > 0) {
         scheduleData = parsed;
       } else {
         localStorage.removeItem('mabiu_schedule_data');
@@ -355,8 +355,7 @@ async function initApp() {
       const shouldUpdate = bestFresh && (
         !scheduleData ||
         (bestFresh.lastUpdated && bestFresh.lastUpdated > (scheduleData.lastUpdated || 0)) ||
-        bestFresh.fileName !== scheduleData.fileName ||
-        (!scheduleData.schedules?.[currentGroup]?.days?.['2026-10-30'] && bestFresh.schedules?.[currentGroup]?.days?.['2026-10-30'])
+        bestFresh.fileName !== scheduleData.fileName
       );
 
       if (shouldUpdate) {
@@ -1188,7 +1187,7 @@ async function checkYandexDiskUpdates(isManual = false) {
       let diskJson = null;
 
       try {
-        const resp = await fetch(yandexApi);
+        const resp = await fetch(yandexApi, { referrerPolicy: 'no-referrer' });
         if (resp.ok) {
           diskJson = await resp.json();
         }
@@ -1213,22 +1212,29 @@ async function checkYandexDiskUpdates(isManual = false) {
           xlsxFiles.sort((a, b) => new Date(b.modified || 0) - new Date(a.modified || 0));
           const latestFile = xlsxFiles[0];
 
-          // Download latest xlsx (try direct first, then proxy)
+          // Download latest xlsx (direct with no-referrer prevents Yandex hotlink 403, with fallback)
           let arrayBuffer = null;
           try {
-            const fileResp = await fetch(latestFile.file);
+            const fileResp = await fetch(latestFile.file, { referrerPolicy: 'no-referrer', cache: 'no-store' });
             if (fileResp.ok) {
               arrayBuffer = await fileResp.arrayBuffer();
             }
           } catch (_) {}
 
           if (!arrayBuffer) {
-            try {
-              const fileResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(latestFile.file)}`);
-              if (fileResp.ok) {
-                arrayBuffer = await fileResp.arrayBuffer();
-              }
-            } catch (_) {}
+            const proxies = [
+              `https://api.allorigins.win/raw?url=${encodeURIComponent(latestFile.file)}`,
+              `https://corsproxy.org/?${encodeURIComponent(latestFile.file)}`
+            ];
+            for (const pUrl of proxies) {
+              try {
+                const fileResp = await fetch(pUrl, { referrerPolicy: 'no-referrer' });
+                if (fileResp.ok) {
+                  arrayBuffer = await fileResp.arrayBuffer();
+                  if (arrayBuffer && arrayBuffer.byteLength > 0) break;
+                }
+              } catch (_) {}
+            }
           }
 
           if (arrayBuffer && arrayBuffer.byteLength > 0) {

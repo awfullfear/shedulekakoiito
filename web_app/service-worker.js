@@ -1,9 +1,9 @@
-const CACHE_NAME = 'mabiu-schedule-v4';
+const CACHE_NAME = 'mabiu-schedule-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './style.css?v=4',
-  './app.js?v=4',
+  './style.css?v=5',
+  './app.js?v=5',
   './manifest.json',
   './favicon.svg',
   './icon-192.png',
@@ -36,6 +36,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // NEVER intercept cross-origin requests (Yandex Disk API, downloads, CDNs)
+  // Let the browser handle external requests natively!
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Network-First for API and schedule.json: ALWAYS get latest schedule from network!
   if (url.pathname.includes('/api/schedule') || url.pathname.includes('schedule.json')) {
     event.respondWith(
@@ -52,7 +58,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-While-Revalidate for app shell
+  // Stale-While-Revalidate for local app shell
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request)
