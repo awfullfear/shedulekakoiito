@@ -504,11 +504,106 @@ header {
   border-radius: var(--radius-card);
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
 }
 
 .lesson-card:active {
   transform: scale(0.99);
+}
+
+.lesson-card.lesson-active {
+  border-color: var(--primary);
+  box-shadow: 0 6px 22px var(--theme-glow);
+  background-image: linear-gradient(180deg, var(--primary-light) 0%, transparent 72px);
+}
+
+.lesson-card.lesson-finished {
+  opacity: 0.65;
+}
+
+.lesson-progress {
+  display: none;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.lesson-card.lesson-active .lesson-progress {
+  display: block;
+}
+
+.lesson-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lesson-progress-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+}
+
+.lesson-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45);
+  animation: livePulse 1.8s ease-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+.lesson-progress-remaining {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lesson-progress-track {
+  position: relative;
+  width: 100%;
+  height: 7px;
+  background-color: var(--surface-variant);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.lesson-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+  transition: width 0.5s linear;
+  position: relative;
+}
+
+.lesson-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  animation: progressShimmer 2.2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .lesson-top-row {
@@ -1162,7 +1257,9 @@ header {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .floating-emoji-glyph {
+  .floating-emoji-glyph,
+  .lesson-live-dot,
+  .lesson-progress-fill::after {
     animation: none;
   }
 }

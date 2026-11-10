@@ -601,7 +601,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v6') {
+        if (k !== 'mabiu-schedule-v7') {
           caches.delete(k);
         }
       });
@@ -899,6 +899,12 @@ function renderLessons() {
     const card = document.createElement('div');
     card.className = 'lesson-card';
 
+    const interval = parseLessonTimeInterval(lesson.time);
+    if (interval) {
+      card.dataset.startSec = String(interval.startSec);
+      card.dataset.endSec = String(interval.endSec);
+    }
+
     // Lesson type badge styling
     let typeClass = 'type-practice';
     const typeLower = (lesson.lessonType || '').toLowerCase();
@@ -948,10 +954,26 @@ function renderLessons() {
           <span>Совместно с: ${escapeHtml(jointText)}</span>
         </div>
       ` : ''}
+      ${interval ? `
+        <div class="lesson-progress">
+          <div class="lesson-progress-meta">
+            <span class="lesson-progress-status">
+              <span class="lesson-live-dot" aria-hidden="true"></span>
+              <span class="lesson-progress-status-text">Идёт сейчас · 0%</span>
+            </span>
+            <span class="lesson-progress-remaining">Осталось 00:00</span>
+          </div>
+          <div class="lesson-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="lesson-progress-fill"></div>
+          </div>
+        </div>
+      ` : ''}
     `;
 
     lessonsList.appendChild(card);
   });
+
+  updateLessonCardsProgress();
 }
 
 function findNextDayWithLessons(fromDateStr) {
@@ -983,7 +1005,73 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// --- Live Countdown Ticker (Real-Time 1s Tick) ---
+// --- Live Countdown Ticker & Active Lesson Progress (Real-Time 1s Tick) ---
+
+function parseLessonTimeInterval(timeStr) {
+  const rawTime = String(timeStr || '').replace(/\s+/g, '');
+  const m = rawTime.match(/(\d{1,2})[.:](\d{2})[-–—](\d{1,2})[.:](\d{2})/);
+  if (!m) return null;
+
+  const sh = parseInt(m[1], 10);
+  const sm = parseInt(m[2], 10);
+  const eh = parseInt(m[3], 10);
+  const em = parseInt(m[4], 10);
+  const startSec = (sh * 60 + sm) * 60;
+  const endSec = (eh * 60 + em) * 60;
+  if (endSec <= startSec) return null;
+
+  return {
+    startSec,
+    endSec,
+    startTimeStr: `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`,
+    endTimeStr: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`
+  };
+}
+
+function updateLessonCardsProgress(now = new Date()) {
+  if (!lessonsList) return;
+  const cards = lessonsList.querySelectorAll('.lesson-card');
+  if (cards.length === 0) return;
+
+  const isViewingToday = (selectedDateStr === getTodayDateStr());
+  const currentTimeInSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+
+  cards.forEach((card) => {
+    const startSec = parseInt(card.dataset.startSec || '', 10);
+    const endSec = parseInt(card.dataset.endSec || '', 10);
+
+    if (!isViewingToday || isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
+      card.classList.remove('lesson-active', 'lesson-finished');
+      return;
+    }
+
+    if (currentTimeInSec >= startSec && currentTimeInSec <= endSec) {
+      card.classList.add('lesson-active');
+      card.classList.remove('lesson-finished');
+
+      const totalSec = endSec - startSec;
+      const elapsedSec = currentTimeInSec - startSec;
+      const remainingSec = endSec - currentTimeInSec;
+      const percent = Math.min(100, Math.max(0, (elapsedSec / totalSec) * 100));
+      const percentRounded = Math.round(percent);
+
+      const statusTextEl = card.querySelector('.lesson-progress-status-text');
+      const remainingEl = card.querySelector('.lesson-progress-remaining');
+      const trackEl = card.querySelector('.lesson-progress-track');
+      const fillEl = card.querySelector('.lesson-progress-fill');
+
+      if (statusTextEl) statusTextEl.textContent = `Идёт сейчас · ${percentRounded}%`;
+      if (remainingEl) remainingEl.textContent = `Осталось ${formatDuration(remainingSec * 1000)}`;
+      if (trackEl) trackEl.setAttribute('aria-valuenow', String(percentRounded));
+      if (fillEl) fillEl.style.width = `${percent.toFixed(2)}%`;
+    } else if (currentTimeInSec > endSec) {
+      card.classList.remove('lesson-active');
+      card.classList.add('lesson-finished');
+    } else {
+      card.classList.remove('lesson-active', 'lesson-finished');
+    }
+  });
+}
 
 function startLiveTicker() {
   if (tickerTimerId) clearInterval(tickerTimerId);
@@ -1004,6 +1092,8 @@ function updateTickerOnce() {
 
   if (statusBanner) statusBanner.classList.remove('clickable');
   const now = new Date();
+  updateLessonCardsProgress(now);
+
   const todayStr = getTodayDateStr();
   const groupSchedule = scheduleData?.schedules?.[currentGroup];
   const todayLessons = groupSchedule?.days?.[todayStr] || [];
@@ -1020,37 +1110,19 @@ function updateTickerOnce() {
   }
 
   // Parse lesson intervals for today
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const currentSeconds = now.getSeconds();
-  const currentTimeInSec = currentMinutes * 60 + currentSeconds;
+  const currentTimeInSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
   const parsedLessons = todayLessons.map((l) => {
-    const rawTime = (l.time || '').replace(/\s+/g, '');
-    const m = rawTime.match(/(\d{1,2})[.:](\d{2})[-–—](\d{1,2})[.:](\d{2})/);
-    let startSec = 0;
-    let endSec = 0;
-    let startTimeStr = '00:00';
-    let endTimeStr = '00:00';
-
-    if (m) {
-      const sh = parseInt(m[1], 10);
-      const sm = parseInt(m[2], 10);
-      const eh = parseInt(m[3], 10);
-      const em = parseInt(m[4], 10);
-      startSec = (sh * 60 + sm) * 60;
-      endSec = (eh * 60 + em) * 60;
-      startTimeStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
-      endTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-    }
-
+    const interval = parseLessonTimeInterval(l.time);
+    if (!interval) return null;
     return {
       lesson: l,
-      startSec,
-      endSec,
-      startTimeStr,
-      endTimeStr
+      startSec: interval.startSec,
+      endSec: interval.endSec,
+      startTimeStr: interval.startTimeStr,
+      endTimeStr: interval.endTimeStr
     };
-  }).filter(p => p.startSec > 0 && p.endSec > 0);
+  }).filter(Boolean);
 
   if (parsedLessons.length === 0) {
     statusBadge.textContent = 'Расписание';
