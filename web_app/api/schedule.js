@@ -6,8 +6,29 @@ const API_URL = `https://cloud-api.yandex.net/v1/disk/public/resources?public_ke
 
 const TIME_REGEX = /(\d{1,2}[:.]\d{2})\s*[-–—]\s*(\d{1,2}[:.]\d{2})/;
 const ROOM_REGEX = /(?:,\s*)?(?:(?:Ауд\.?|АУд\.?)\s*[\w\d/]*\s*(?:\([^)]+\))?|(?:Актовый\s*зал|Конференц[- ]*зал|Спорт\.?\s*зал|Он[- ]*лайн|ДО)(?:\s*\([^)]+\))?|\((?:Конференц[- ]*зал|Актовый\s*зал)\))\s*$/i;
-const TEACHER_REGEX = /([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.+\s*[А-ЯЁ]\.*|\s+[А-ЯЁ][а-яё]+))\s*$/;
-const LESSON_TYPE_REGEX = /\(\s*(лек|лекц|лекция|пр|практ|практика|семинар|лаб|зачет|зачёт|экзамен|конс)\.?\s*\)/i;
+const TEACHER_REGEX = /([А-ЯЁа-яё][а-яё]{1,}\s+[А-ЯЁ]\.+\s*[А-ЯЁ]\.*)\s*$/;
+const LESSON_TYPE_REGEX = /\(\s*(практическ(?:ое|ие)\s+заняти[ея]|практ\.?\s*заняти[ея]|практик[аи]|практ|пр\.?\s*з|пр|лекци[яи]|лекц|лек|семинарск(?:ое|ие)\s+заняти[ея]|семинары|семинар|сем|лабораторн(?:ая|ые)\s+работ[аы]|лабораторн(?:ая|ые)|лаб|дифференцированн(?:ый)?\s*зач[её]т|диф\.?\s*зач[её]т|зач[её]т|экзамен|экз|консультаци[яи]|конс)\.?\s*\)/gi;
+
+function normalizeLessonTypeLabel(rawType) {
+    if (!rawType) return '';
+    const t = String(rawType).trim().toLowerCase();
+    if (t.startsWith('лек')) return 'Лекция';
+    if (t.startsWith('пр')) return 'Практическое занятие';
+    if (t.startsWith('сем')) return 'Семинар';
+    if (t.startsWith('лаб')) return 'Лабораторная';
+    if (t.includes('зач')) return 'Зачёт';
+    if (t.startsWith('экз')) return 'Экзамен';
+    if (t.startsWith('конс')) return 'Консультация';
+    return String(rawType).trim();
+}
+
+function cleanSubjectText(text) {
+    return String(text || '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+([,.;:!?])/g, '$1')
+        .replace(/^[,.;:\s-]+|[,;\s-]+$/g, '')
+        .trim();
+}
 
 function parseDayOfWeek(text) {
     if (!text) return null;
@@ -196,51 +217,32 @@ function parseWorkbook(buffer, fileName = '') {
                 const text = rawText.replace(/\r/g, '').replace(/tc=\{[^}]+\}[^\n]*/g, '').replace(/(МСА|Светлана -):.*/g, '').replace(/\n+/g, '\n').trim();
                 if (!text) continue;
 
-                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-                let rawSubject = lines[0] || '';
+                let workingText = text;
                 let teacher = '';
                 let room = '';
-
-                if (lines.length > 1) {
-                    for (let j = 1; j < lines.length; j++) {
-                        let line = lines[j];
-                        const mRoom = line.match(ROOM_REGEX);
-                        if (mRoom) {
-                            room = mRoom[0].trim().replace(/^,\s*/, '');
-                            line = line.replace(ROOM_REGEX, '').trim();
-                        }
-                        if (line && !teacher) teacher = line;
-                    }
-                } else {
-                    let line = lines[0];
-                    const mRoom = line.match(ROOM_REGEX);
-                    if (mRoom) {
-                        room = mRoom[0].trim().replace(/^,\s*/, '');
-                        line = line.replace(ROOM_REGEX, '').trim();
-                    }
-                    const mTeach = line.match(TEACHER_REGEX);
-                    if (mTeach) {
-                        teacher = mTeach[1].trim();
-                        rawSubject = line.replace(TEACHER_REGEX, '').trim().replace(/,\s*$/, '');
-                    } else {
-                        rawSubject = line;
-                    }
-                }
-
                 let lessonType = '';
-                let cleanSubject = rawSubject;
-                const mType = rawSubject.match(LESSON_TYPE_REGEX);
-                if (mType) {
-                    const rawLt = mType[1].toLowerCase();
-                    if (rawLt.includes('лекц') || rawLt.includes('лек')) lessonType = 'Лекция';
-                    else if (rawLt.includes('практ') || rawLt.includes('пр')) lessonType = 'Практическое занятие';
-                    else if (rawLt.includes('семинар')) lessonType = 'Семинар';
-                    else if (rawLt.includes('лаб')) lessonType = 'Лабораторная';
-                    else if (rawLt.includes('зачет') || rawLt.includes('зачёт')) lessonType = 'Зачет';
-                    else if (rawLt.includes('экзамен')) lessonType = 'Экзамен';
-                    else if (rawLt.includes('конс')) lessonType = 'Консультация';
-                    cleanSubject = rawSubject.replace(LESSON_TYPE_REGEX, '').trim().replace(/^,\s*|\s*,\s*$/g, '');
+
+                const mRoom = workingText.match(ROOM_REGEX);
+                if (mRoom) {
+                    room = mRoom[0].trim().replace(/^,\s*/, '');
+                    workingText = workingText.substring(0, workingText.length - mRoom[0].length).trim();
                 }
+
+                workingText = workingText.replace(LESSON_TYPE_REGEX, (_, rawType) => {
+                    if (!lessonType) lessonType = normalizeLessonTypeLabel(rawType);
+                    return ' ';
+                });
+
+                workingText = cleanSubjectText(workingText);
+
+                const mTeach = workingText.match(TEACHER_REGEX);
+                if (mTeach) {
+                    teacher = mTeach[1].trim();
+                    workingText = workingText.substring(0, workingText.length - mTeach[0].length).trim();
+                }
+
+                const cleanSubject = cleanSubjectText(workingText) || cleanSubjectText(text);
+                const rawSubject = cleanSubjectText(text);
 
                 const normCell = normalizeContent(rawText);
                 const jointGroups = [];
