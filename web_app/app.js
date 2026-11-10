@@ -12,7 +12,6 @@
 
 // Configuration & State
 const CONFIG = {
-  defaultGroup: 'ЛОМО26/СО',
   yandexPublicKey: 'https://disk.yandex.ru/d/7XafcYMVe1ec7g',
   yandexKeyId: '7XafcYMVe1ec7g',
   corsProxy: 'https://api.allorigins.win/raw?url='
@@ -24,43 +23,79 @@ const THEMES = [
     name: 'Океан',
     emoji: '🌊',
     color: '#2563eb',
-    desc: 'Классическая синяя тема'
+    desc: 'Глубокий океан и морской бриз',
+    floatingEmojis: ['🌊', '🫧', '🐚', '🐬', '🐳', '💧'],
+    burstColors: ['#3b82f6', '#38bdf8', '#93c5fd', '#2563eb'],
+    sparkEmoji: '🫧'
   },
   {
     id: 'emerald',
     name: 'Изумруд',
     emoji: '🌿',
-    color: '#10b981',
-    desc: 'Мягкий природный зелёный цвет'
+    color: '#059669',
+    desc: 'Свежая лесная листва и природа',
+    floatingEmojis: ['🌿', '🍃', '🍀', '🌱', '🪴', '🪷'],
+    burstColors: ['#10b981', '#34d399', '#6ee7b7', '#059669'],
+    sparkEmoji: '🍃'
   },
   {
     id: 'violet',
     name: 'Аметист',
     emoji: '🔮',
-    color: '#8b5cf6',
-    desc: 'Глубокий неоновый фиолетовый'
+    color: '#7c3aed',
+    desc: 'Ночной космос, звёзды и кристаллы',
+    floatingEmojis: ['🔮', '✨', '🪐', '🌙', '⭐', '💎'],
+    burstColors: ['#8b5cf6', '#c084fc', '#a78bfa', '#7c3aed'],
+    sparkEmoji: '✨'
   },
   {
     id: 'rose',
     name: 'Сакура',
     emoji: '🌸',
-    color: '#f43f5e',
-    desc: 'Нежный пастельный кораллово-розовый'
+    color: '#e11d48',
+    desc: 'Весенние лепестки и бабочки',
+    floatingEmojis: ['🌸', '🌺', '🌷', '🦋', '💮', '🎀'],
+    burstColors: ['#f43f5e', '#fb7185', '#fda4af', '#e11d48'],
+    sparkEmoji: '🌸'
   },
   {
-    id: 'halloween',
-    name: 'Хэллоуин 🎃',
-    emoji: '🎃',
-    color: '#f97316',
-    desc: 'Мистическая ночь и летающие тыковки'
+    id: 'amber',
+    name: 'Осень',
+    emoji: '🍁',
+    color: '#d97706',
+    desc: 'Тёплый янтарь, листопад и уют',
+    floatingEmojis: ['🍁', '🍂', '☕', '🧣', '🌰', '✨'],
+    burstColors: ['#f59e0b', '#fbbf24', '#ea580c', '#d97706'],
+    sparkEmoji: '🍂'
+  },
+  {
+    id: 'arctic',
+    name: 'Арктика',
+    emoji: '❄️',
+    color: '#0284c7',
+    desc: 'Снежинки, лёд и зимняя свежесть',
+    floatingEmojis: ['❄️', '🧊', '⛄', '🌬️', '💎', '✨'],
+    burstColors: ['#0ea5e9', '#38bdf8', '#bae6fd', '#0284c7'],
+    sparkEmoji: '❄️'
   }
 ];
 
+function getValidThemeId(themeId) {
+  return THEMES.some(t => t.id === themeId) ? themeId : 'blue';
+}
+
+const storedGroupRaw = (localStorage.getItem('mabiu_group') || '').trim();
 let scheduleData = null;
-let currentGroup = localStorage.getItem('mabiu_group') || CONFIG.defaultGroup;
-let currentTheme = localStorage.getItem('mabiu_theme') || 'halloween';
+let currentGroup = storedGroupRaw || null;
+let currentTheme = getValidThemeId(localStorage.getItem('mabiu_theme'));
 let selectedDateStr = getTodayDateStr();
 let tickerTimerId = null;
+
+// Floating emojis runtime state
+let activeFloatingEmojis = [];
+const emojiSpawnTimers = new Set();
+let emojiGeneration = 0;
+let appliedDecorationTheme = null;
 
 // DOM Elements
 const currentGroupLabel = document.getElementById('currentGroupLabel');
@@ -68,7 +103,10 @@ const groupSelectorBtn = document.getElementById('groupSelectorBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const themeBtn = document.getElementById('themeBtn');
-const halloweenHeaderPumpkin = document.getElementById('halloweenHeaderPumpkin');
+const headerThemeEmoji = document.getElementById('headerThemeEmoji');
+const statusThemeEmoji = document.getElementById('statusThemeEmoji');
+const themeColorMeta = document.getElementById('themeColorMeta');
+const themeDecorations = document.getElementById('themeDecorations');
 const themeGrid = document.getElementById('themeGrid');
 
 const themeModal = document.getElementById('themeModal');
@@ -163,50 +201,336 @@ function formatDuration(diffMs) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-// --- Themes Management ---
+// --- Themes Management & Interactive Floating Emojis ---
+
+function getThemeById(themeId) {
+  return THEMES.find(t => t.id === themeId) || THEMES[0];
+}
+
+function getEmojiCandidateZones() {
+  const w = window.innerWidth || 390;
+  let leftMax = 12;
+  let rightMin = 88;
+  if (w >= 760) {
+    const gutterPct = Math.floor((((w - 520) / 2) / w) * 100);
+    leftMax = Math.min(26, Math.max(12, gutterPct - 2));
+    rightMin = 100 - leftMax;
+  }
+
+  return [
+    { xMin: rightMin, xMax: 95, yMin: 13, yMax: 21 },
+    { xMin: 4, xMax: leftMax, yMin: 15, yMax: 24 },
+    { xMin: rightMin, xMax: 96, yMin: 27, yMax: 38 },
+    { xMin: 4, xMax: leftMax, yMin: 33, yMax: 45 },
+    { xMin: rightMin, xMax: 95, yMin: 44, yMax: 56 },
+    { xMin: 4, xMax: leftMax, yMin: 52, yMax: 64 },
+    { xMin: rightMin, xMax: 96, yMin: 63, yMax: 74 },
+    { xMin: 5, xMax: leftMax, yMin: 70, yMax: 81 },
+    { xMin: rightMin - 4, xMax: 94, yMin: 80, yMax: 90 },
+    { xMin: 5, xMax: leftMax + 4, yMin: 82, yMax: 91 }
+  ];
+}
+
+function pickFloatingSlot(avoidSlotIndex = -1, avoidPos = null) {
+  const zones = getEmojiCandidateZones();
+  const occupiedIndices = new Set(activeFloatingEmojis.map(item => item.slotIndex));
+
+  let candidates = [];
+  for (let i = 0; i < zones.length; i++) {
+    if (i === avoidSlotIndex || occupiedIndices.has(i)) continue;
+    const z = zones[i];
+    const x = z.xMin + Math.random() * Math.max(2, z.xMax - z.xMin);
+    const y = z.yMin + Math.random() * Math.max(2, z.yMax - z.yMin);
+
+    let tooClose = false;
+    for (const active of activeFloatingEmojis) {
+      const dx = x - active.x;
+      const dy = y - active.y;
+      if (Math.hypot(dx, dy) < 18) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (!tooClose && avoidPos) {
+      if (Math.hypot(x - avoidPos.x, y - avoidPos.y) < 20) {
+        tooClose = true;
+      }
+    }
+    if (!tooClose) {
+      candidates.push({ slotIndex: i, x, y });
+    }
+  }
+
+  if (candidates.length === 0) {
+    for (let i = 0; i < zones.length; i++) {
+      if (i !== avoidSlotIndex && !occupiedIndices.has(i)) {
+        const z = zones[i];
+        candidates.push({
+          slotIndex: i,
+          x: (z.xMin + z.xMax) / 2,
+          y: (z.yMin + z.yMax) / 2
+        });
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    const fallbackIdx = (avoidSlotIndex + 3) % zones.length;
+    const z = zones[fallbackIdx];
+    return {
+      slotIndex: fallbackIdx,
+      x: (z.xMin + z.xMax) / 2,
+      y: (z.yMin + z.yMax) / 2
+    };
+  }
+
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function pickThemeEmojiGlyph(theme, avoidEmoji = null) {
+  const pool = theme.floatingEmojis && theme.floatingEmojis.length > 0 ? theme.floatingEmojis : [theme.emoji];
+  const activeGlyphs = new Set(activeFloatingEmojis.map(item => item.emoji));
+
+  let fresh = pool.filter(e => e !== avoidEmoji && !activeGlyphs.has(e));
+  if (fresh.length === 0) {
+    fresh = pool.filter(e => e !== avoidEmoji);
+  }
+  if (fresh.length === 0) {
+    fresh = pool;
+  }
+  return fresh[Math.floor(Math.random() * fresh.length)];
+}
+
+function spawnPopParticles(cx, cy, theme) {
+  if (!themeDecorations) return;
+  const colors = theme.burstColors || [theme.color];
+  const count = 8;
+
+  // Expanding ring
+  const ring = document.createElement('div');
+  ring.className = 'emoji-pop-ring';
+  ring.style.left = `${cx}px`;
+  ring.style.top = `${cy}px`;
+  ring.style.setProperty('--ring-color', theme.color);
+  themeDecorations.appendChild(ring);
+  setTimeout(() => ring.remove(), 460);
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+    const distance = 26 + Math.random() * 28;
+    const tx = Math.cos(angle) * distance;
+    const ty = Math.sin(angle) * distance;
+    const p = document.createElement('div');
+    const isSpark = i % 3 === 0;
+
+    p.className = `emoji-burst-particle${isSpark ? ' spark' : ''}`;
+    p.style.left = `${cx}px`;
+    p.style.top = `${cy}px`;
+    p.style.setProperty('--tx', `${tx.toFixed(1)}px`);
+    p.style.setProperty('--ty', `${ty.toFixed(1)}px`);
+    p.style.setProperty('--trot', `${Math.round((Math.random() - 0.5) * 180)}deg`);
+
+    if (isSpark) {
+      p.textContent = theme.sparkEmoji || '✨';
+    } else {
+      const size = 6 + Math.random() * 5;
+      p.style.width = `${size.toFixed(1)}px`;
+      p.style.height = `${size.toFixed(1)}px`;
+      p.style.backgroundColor = colors[i % colors.length];
+    }
+
+    themeDecorations.appendChild(p);
+    setTimeout(() => p.remove(), 520);
+  }
+}
+
+function popFloatingEmoji(item, theme, gen) {
+  if (!item || !item.el || item.el.dataset.popping === '1') return;
+  item.el.dataset.popping = '1';
+
+  const rect = item.el.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  item.el.classList.remove('spawning');
+  item.el.classList.add('popping');
+  spawnPopParticles(cx, cy, theme);
+
+  activeFloatingEmojis = activeFloatingEmojis.filter(a => a !== item);
+
+  setTimeout(() => {
+    if (item.el && item.el.parentNode) {
+      item.el.remove();
+    }
+  }, 270);
+
+  // Schedule respawn in a different spot with another theme emoji
+  const respawnDelay = 1100 + Math.random() * 1400;
+  const timerId = setTimeout(() => {
+    emojiSpawnTimers.delete(timerId);
+    if (gen !== emojiGeneration) return;
+    spawnSingleFloatingEmoji(theme, gen, {
+      avoidSlotIndex: item.slotIndex,
+      avoidPos: { x: item.x, y: item.y },
+      avoidEmoji: item.emoji
+    });
+  }, respawnDelay);
+  emojiSpawnTimers.add(timerId);
+}
+
+function spawnSingleFloatingEmoji(theme, gen, opts = {}) {
+  if (!themeDecorations || gen !== emojiGeneration) return;
+
+  const slot = pickFloatingSlot(
+    opts.avoidSlotIndex !== undefined ? opts.avoidSlotIndex : -1,
+    opts.avoidPos || null
+  );
+  const emojiChar = pickThemeEmojiGlyph(theme, opts.avoidEmoji || null);
+
+  const el = document.createElement('div');
+  el.className = 'floating-emoji spawning';
+  el.style.left = `${slot.x.toFixed(2)}%`;
+  el.style.top = `${slot.y.toFixed(2)}%`;
+
+  const glyph = document.createElement('span');
+  glyph.className = 'floating-emoji-glyph';
+  glyph.textContent = emojiChar;
+
+  const fontSize = Math.round(23 + Math.random() * 7);
+  const floatDur = (4.2 + Math.random() * 2.4).toFixed(2);
+  const floatDelay = (-Math.random() * 3).toFixed(2);
+  const floatX = `${Math.round((Math.random() - 0.5) * 14)}px`;
+  const floatY = `${Math.round(-8 - Math.random() * 8)}px`;
+  const floatRot = `${Math.round((Math.random() - 0.5) * 16)}deg`;
+  const opacity = (0.64 + Math.random() * 0.22).toFixed(2);
+
+  glyph.style.setProperty('--emoji-size', `${fontSize}px`);
+  glyph.style.setProperty('--float-dur', `${floatDur}s`);
+  glyph.style.setProperty('--float-delay', `${floatDelay}s`);
+  glyph.style.setProperty('--float-x', floatX);
+  glyph.style.setProperty('--float-y', floatY);
+  glyph.style.setProperty('--float-rot', floatRot);
+  glyph.style.setProperty('--emoji-opacity', opacity);
+
+  el.appendChild(glyph);
+
+  const item = {
+    el,
+    slotIndex: slot.slotIndex,
+    x: slot.x,
+    y: slot.y,
+    emoji: emojiChar
+  };
+
+  const cleanSpawningClass = () => el.classList.remove('spawning');
+  el.addEventListener('animationend', cleanSpawningClass, { once: true });
+  setTimeout(cleanSpawningClass, 480);
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    popFloatingEmoji(item, theme, gen);
+  });
+
+  activeFloatingEmojis.push(item);
+  themeDecorations.appendChild(el);
+}
+
+function clearFloatingEmojis() {
+  emojiGeneration += 1;
+  emojiSpawnTimers.forEach((id) => clearTimeout(id));
+  emojiSpawnTimers.clear();
+  activeFloatingEmojis = [];
+  if (themeDecorations) {
+    themeDecorations.innerHTML = '';
+  }
+}
+
+function renderFloatingEmojisForTheme(theme) {
+  if (!themeDecorations) return;
+  clearFloatingEmojis();
+  const gen = emojiGeneration;
+  const targetCount = (window.innerWidth || 390) >= 600 ? 5 : 4;
+
+  for (let i = 0; i < targetCount; i++) {
+    const tId = setTimeout(() => {
+      emojiSpawnTimers.delete(tId);
+      if (gen !== emojiGeneration) return;
+      spawnSingleFloatingEmoji(theme, gen);
+    }, i * 90);
+    emojiSpawnTimers.add(tId);
+  }
+}
+
+function renderThemeGrid() {
+  if (!themeGrid) return;
+  themeGrid.innerHTML = '';
+
+  THEMES.forEach((theme) => {
+    const btn = document.createElement('button');
+    btn.className = `theme-btn ${theme.id === currentTheme ? 'active' : ''}`;
+    btn.dataset.theme = theme.id;
+    btn.type = 'button';
+    btn.title = theme.name;
+
+    btn.innerHTML = `
+      <span class="theme-swatch" style="background: ${theme.color}22; border: 1.5px solid ${theme.color}66;">
+        ${theme.emoji}
+      </span>
+      <span class="theme-name">${theme.name}</span>
+    `;
+
+    btn.addEventListener('click', () => {
+      applyTheme(theme.id, true);
+    });
+
+    themeGrid.appendChild(btn);
+  });
+}
 
 function applyTheme(themeId, notify = false) {
-  currentTheme = themeId;
-  localStorage.setItem('mabiu_theme', themeId);
-  document.documentElement.setAttribute('data-theme', themeId);
+  const safeId = getValidThemeId(themeId);
+  const theme = getThemeById(safeId);
+  currentTheme = safeId;
+  localStorage.setItem('mabiu_theme', safeId);
+  document.documentElement.setAttribute('data-theme', safeId);
+
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', theme.color);
+  }
 
   // Update theme buttons in settings
   if (themeGrid) {
     themeGrid.querySelectorAll('.theme-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.theme === themeId);
+      btn.classList.toggle('active', btn.dataset.theme === safeId);
     });
   }
 
   // Update theme choice items in theme modal
   if (themeSelectList) {
     themeSelectList.querySelectorAll('.theme-choice-item').forEach((item) => {
-      item.classList.toggle('active', item.dataset.theme === themeId);
+      item.classList.toggle('active', item.dataset.theme === safeId);
     });
   }
 
-  // Header pumpkin toggle
-  if (halloweenHeaderPumpkin) {
-    halloweenHeaderPumpkin.style.display = (themeId === 'halloween') ? 'inline' : 'none';
+  // Header theme badge emoji
+  if (headerThemeEmoji) {
+    headerThemeEmoji.textContent = theme.emoji;
   }
 
-  // Update status icon box for Halloween
-  if (statusIconBox) {
-    if (themeId === 'halloween') {
-      statusIconBox.innerHTML = '<span style="font-size: 24px; line-height: 1;">🎃</span>';
-    } else {
-      statusIconBox.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-      `;
-    }
+  // Status banner icon emoji matching theme
+  if (statusThemeEmoji) {
+    statusThemeEmoji.textContent = theme.emoji;
+  } else if (statusIconBox) {
+    statusIconBox.innerHTML = `<span id="statusThemeEmoji" class="status-theme-emoji">${theme.emoji}</span>`;
+  }
+
+  if (appliedDecorationTheme !== safeId) {
+    appliedDecorationTheme = safeId;
+    renderFloatingEmojisForTheme(theme);
   }
 
   if (notify) {
-    const found = THEMES.find(t => t.id === themeId);
-    const themeName = found ? found.name : themeId;
-    showToast(`Тема: ${themeName}`);
+    showToast(`Тема: ${theme.emoji} ${theme.name}`);
   }
 }
 
@@ -261,16 +585,23 @@ function cycleTheme() {
 
 // --- Data Loading & Persistence ---
 
+function updateGroupLabelUI() {
+  if (currentGroupLabel) {
+    currentGroupLabel.textContent = currentGroup || 'Выбрать направление';
+  }
+}
+
 async function initApp() {
+  renderThemeGrid();
   applyTheme(currentTheme, false);
-  currentGroupLabel.textContent = currentGroup;
+  updateGroupLabelUI();
   if (diskSourceLabel) diskSourceLabel.textContent = CONFIG.yandexKeyId;
 
   // Clear stale service worker caches from window
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v5') {
+        if (k !== 'mabiu-schedule-v6') {
           caches.delete(k);
         }
       });
@@ -310,28 +641,29 @@ async function initApp() {
   // 3. Fallback structure if both failed
   if (!scheduleData) {
     scheduleData = {
-      groups: [currentGroup],
+      groups: currentGroup ? [currentGroup] : [],
       schedules: {},
       fileName: 'default',
       lastUpdated: Date.now()
     };
   }
 
-  // Ensure current group exists or fallback
-  if (!scheduleData.groups || !scheduleData.groups.includes(currentGroup)) {
-    if (scheduleData.groups && scheduleData.groups.length > 0) {
-      // Pick first group ending in 26 or matching LOMO
-      const found = scheduleData.groups.find(g => g.includes('26')) || scheduleData.groups[0];
-      currentGroup = found;
-      localStorage.setItem('mabiu_group', currentGroup);
-      currentGroupLabel.textContent = currentGroup;
-    }
+  // Validate previously saved group against loaded groups (never auto-select if unset)
+  if (currentGroup && scheduleData.groups && scheduleData.groups.length > 0 && !scheduleData.groups.includes(currentGroup)) {
+    currentGroup = null;
+    localStorage.removeItem('mabiu_group');
   }
+  updateGroupLabelUI();
 
   updateSettingsLabels();
   setupDaysCarousel();
   renderLessons();
   startLiveTicker();
+
+  // Prompt user to pick direction immediately if not saved yet
+  if (!currentGroup) {
+    openGroupModal({ autoFocus: false });
+  }
 
   // 4. Background check for fresh schedule.json from repository (checks both ./schedule.json and ./data/schedule.json)
   (async () => {
@@ -361,10 +693,18 @@ async function initApp() {
       if (shouldUpdate) {
         scheduleData = bestFresh;
         localStorage.setItem('mabiu_schedule_data', JSON.stringify(bestFresh));
+        if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
+          currentGroup = null;
+          localStorage.removeItem('mabiu_group');
+          updateGroupLabelUI();
+        }
         updateSettingsLabels();
         setupDaysCarousel();
         renderLessons();
         updateTickerOnce();
+        if (groupModal && groupModal.classList.contains('open')) {
+          renderGroupList(groupSearchInput ? groupSearchInput.value : '');
+        }
         showToast(`Расписание обновлено: ${bestFresh.fileName}`);
       }
     } catch (_) {}
@@ -376,7 +716,7 @@ async function initApp() {
 
 function updateSettingsLabels() {
   if (currentFileNameLabel && scheduleData) {
-    currentFileNameLabel.textContent = scheduleData.fileName || '26.10-31.10.xlsx';
+    currentFileNameLabel.textContent = scheduleData.fileName || 'Не загружено';
   }
   if (lastUpdatedLabel && scheduleData && scheduleData.lastUpdated) {
     const d = new Date(scheduleData.lastUpdated);
@@ -393,7 +733,7 @@ function updateSettingsLabels() {
 
 function getSortedAvailableDates() {
   if (!scheduleData) return [getTodayDateStr()];
-  const groupSchedule = scheduleData.schedules?.[currentGroup];
+  const groupSchedule = currentGroup ? scheduleData.schedules?.[currentGroup] : null;
   const dateSet = new Set();
 
   // Include dates that have lessons or are in schedules
@@ -504,10 +844,31 @@ function renderLessons() {
   dayHeadingText.textContent = formatDateToRu(selectedDateStr);
   dayBadgeToday.style.display = isToday ? 'inline-block' : 'none';
 
+  lessonsList.innerHTML = '';
+
+  if (!currentGroup) {
+    lessonsList.innerHTML = `
+      <div class="empty-card">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+        <div class="empty-title">Направление не выбрано</div>
+        <div class="empty-desc">Укажите вашу группу из списка, чтобы открыть расписание пар и таймер.</div>
+        <button id="selectGroupPromptBtn" class="select-group-cta" type="button">Выбрать направление</button>
+      </div>
+    `;
+    const promptBtn = document.getElementById('selectGroupPromptBtn');
+    if (promptBtn) {
+      promptBtn.addEventListener('click', () => openGroupModal());
+    }
+    return;
+  }
+
   const groupSchedule = scheduleData?.schedules?.[currentGroup];
   const lessons = groupSchedule?.days?.[selectedDateStr] || [];
-
-  lessonsList.innerHTML = '';
 
   if (!lessons || lessons.length === 0) {
     // Empty state
@@ -594,6 +955,7 @@ function renderLessons() {
 }
 
 function findNextDayWithLessons(fromDateStr) {
+  if (!currentGroup) return null;
   const groupSchedule = scheduleData?.schedules?.[currentGroup];
   if (!groupSchedule?.days) return null;
 
@@ -630,6 +992,17 @@ function startLiveTicker() {
 }
 
 function updateTickerOnce() {
+  if (!currentGroup) {
+    if (statusBanner) statusBanner.classList.add('clickable');
+    statusBadge.textContent = 'Начало работы';
+    statusBadge.style.color = 'var(--primary)';
+    statusBadge.style.backgroundColor = 'var(--primary-light)';
+    statusTitle.textContent = 'Выберите направление';
+    statusSubtitle.textContent = 'Нажмите сюда, чтобы указать вашу группу';
+    return;
+  }
+
+  if (statusBanner) statusBanner.classList.remove('clickable');
   const now = new Date();
   const todayStr = getTodayDateStr();
   const groupSchedule = scheduleData?.schedules?.[currentGroup];
@@ -762,11 +1135,14 @@ function updateTickerOnce() {
 
 // --- Group Selector Modal ---
 
-function openGroupModal() {
+function openGroupModal(options = {}) {
+  const autoFocus = !(options && options.autoFocus === false);
   groupSearchInput.value = '';
   renderGroupList('');
   groupModal.classList.add('open');
-  setTimeout(() => groupSearchInput.focus(), 150);
+  if (autoFocus) {
+    setTimeout(() => groupSearchInput.focus(), 150);
+  }
 }
 
 function closeGroupModal() {
@@ -776,7 +1152,9 @@ function closeGroupModal() {
 function renderGroupList(query) {
   groupList.innerHTML = '';
   const q = query.trim().toLowerCase();
-  const allGroups = scheduleData?.groups || [currentGroup];
+  const allGroups = (scheduleData?.groups && scheduleData.groups.length > 0)
+    ? scheduleData.groups
+    : (currentGroup ? [currentGroup] : []);
 
   // Filter 26 cohort groups
   const filtered = allGroups.filter((g) => {
@@ -784,7 +1162,7 @@ function renderGroupList(query) {
   });
 
   if (filtered.length === 0) {
-    groupList.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 14px;">Группы не найдены</div>';
+    groupList.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 14px;">Направления не найдены</div>';
     return;
   }
 
@@ -804,15 +1182,15 @@ function renderGroupList(query) {
 }
 
 function setGroup(groupName) {
-  if (currentGroup === groupName) return;
+  if (!groupName || currentGroup === groupName) return;
   currentGroup = groupName;
   localStorage.setItem('mabiu_group', currentGroup);
-  currentGroupLabel.textContent = currentGroup;
+  updateGroupLabelUI();
 
   setupDaysCarousel();
   renderLessons();
   updateTickerOnce();
-  showToast(`Выбрана группа: ${groupName}`);
+  showToast(`Выбрано направление: ${groupName}`);
 }
 
 // --- Settings & Manual XLSX Upload ---
@@ -873,11 +1251,11 @@ async function handleManualFile(file) {
     scheduleData = parsedData;
     localStorage.setItem('mabiu_schedule_data', JSON.stringify(parsedData));
 
-    // Ensure selected group is valid
-    if (!scheduleData.groups.includes(currentGroup)) {
-      currentGroup = scheduleData.groups[0];
-      localStorage.setItem('mabiu_group', currentGroup);
-      currentGroupLabel.textContent = currentGroup;
+    // Validate previously selected group (do not auto-pick if unset)
+    if (currentGroup && !scheduleData.groups.includes(currentGroup)) {
+      currentGroup = null;
+      localStorage.removeItem('mabiu_group');
+      updateGroupLabelUI();
     }
 
     updateSettingsLabels();
@@ -886,6 +1264,9 @@ async function handleManualFile(file) {
     updateTickerOnce();
     closeSettingsModal();
     showToast(`Файл «${file.name}» успешно загружен!`);
+    if (!currentGroup) {
+      openGroupModal({ autoFocus: false });
+    }
   } catch (err) {
     console.error('Manual parse error:', err);
     showToast(`Ошибка разбора файла: ${err.message || 'Неверный формат'}`);
@@ -1247,10 +1628,18 @@ async function checkYandexDiskUpdates(isManual = false) {
     if (fetchedData && fetchedData.groups && fetchedData.groups.length > 0) {
       scheduleData = fetchedData;
       localStorage.setItem('mabiu_schedule_data', JSON.stringify(fetchedData));
+      if (currentGroup && !fetchedData.groups.includes(currentGroup)) {
+        currentGroup = null;
+        localStorage.removeItem('mabiu_group');
+        updateGroupLabelUI();
+      }
       updateSettingsLabels();
       setupDaysCarousel();
       renderLessons();
       updateTickerOnce();
+      if (groupModal && groupModal.classList.contains('open')) {
+        renderGroupList(groupSearchInput ? groupSearchInput.value : '');
+      }
 
       if (isManual) showToast('Расписание успешно обновлено с Яндекс.Диска!');
     } else {
@@ -1273,12 +1662,20 @@ async function resetSchedule() {
     if (!resp.ok) resp = await fetch('./data/schedule.json');
     if (resp.ok) {
       scheduleData = await resp.json();
+      if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
+        currentGroup = null;
+        localStorage.removeItem('mabiu_group');
+        updateGroupLabelUI();
+      }
       updateSettingsLabels();
       setupDaysCarousel();
       renderLessons();
       updateTickerOnce();
       closeSettingsModal();
       showToast('Расписание успешно сброшено!');
+      if (!currentGroup) {
+        openGroupModal({ autoFocus: false });
+      }
     }
   } catch (err) {
     showToast('Не удалось загрузить исходное расписание');
@@ -1354,7 +1751,12 @@ function setupEventListeners() {
     selectDay(getTodayDateStr());
   });
 
-  // Themes Modal & Grid
+  // Themes Modal & Clickable Banner Prompt
+  if (statusBanner) {
+    statusBanner.addEventListener('click', () => {
+      if (!currentGroup) openGroupModal();
+    });
+  }
   if (themeBtn) {
     themeBtn.addEventListener('click', openThemeModal);
   }
@@ -1366,14 +1768,20 @@ function setupEventListeners() {
       if (e.target === themeModal) closeThemeModal();
     });
   }
-  if (themeGrid) {
-    themeGrid.querySelectorAll('.theme-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tId = btn.dataset.theme;
-        if (tId) applyTheme(tId, true);
-      });
-    });
-  }
+
+  // Re-layout floating emojis smoothly across orientation/width mode changes
+  let lastWideViewport = (window.innerWidth || 390) >= 760;
+  let resizeEmojiTimer = null;
+  window.addEventListener('resize', () => {
+    const isWide = (window.innerWidth || 390) >= 760;
+    if (isWide !== lastWideViewport) {
+      lastWideViewport = isWide;
+      clearTimeout(resizeEmojiTimer);
+      resizeEmojiTimer = setTimeout(() => {
+        renderFloatingEmojisForTheme(getThemeById(currentTheme));
+      }, 200);
+    }
+  });
 
   setupDropzone();
   setupSwipeGestures();

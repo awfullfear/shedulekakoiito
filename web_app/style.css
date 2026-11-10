@@ -4,6 +4,8 @@
   --primary-light: rgba(37, 99, 235, 0.12);
   --primary-container: #dbeafe;
   --on-primary-container: #1e3a8a;
+  --theme-glow: rgba(37, 99, 235, 0.28);
+  --theme-shadow: rgba(37, 99, 235, 0.10);
 
   --bg: #f8fafc;
   --surface: #ffffff;
@@ -29,13 +31,26 @@
   --radius-sm: 8px;
 }
 
-/* Emerald Theme (Мята / Изумруд) */
+/* Blue Theme (Океан) */
+[data-theme="blue"] {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: rgba(37, 99, 235, 0.12);
+  --primary-container: #dbeafe;
+  --on-primary-container: #1e3a8a;
+  --theme-glow: rgba(37, 99, 235, 0.30);
+  --theme-shadow: rgba(37, 99, 235, 0.10);
+}
+
+/* Emerald Theme (Изумруд) */
 [data-theme="emerald"] {
   --primary: #059669;
   --primary-hover: #047857;
   --primary-light: rgba(5, 150, 105, 0.12);
   --primary-container: #d1fae5;
   --on-primary-container: #065f46;
+  --theme-glow: rgba(5, 150, 105, 0.28);
+  --theme-shadow: rgba(5, 150, 105, 0.10);
 }
 
 /* Violet Theme (Аметист) */
@@ -45,6 +60,8 @@
   --primary-light: rgba(124, 58, 237, 0.12);
   --primary-container: #ede9fe;
   --on-primary-container: #5b21b6;
+  --theme-glow: rgba(124, 58, 237, 0.30);
+  --theme-shadow: rgba(124, 58, 237, 0.10);
 }
 
 /* Rose Theme (Сакура) */
@@ -54,35 +71,30 @@
   --primary-light: rgba(225, 29, 72, 0.12);
   --primary-container: #ffe4e6;
   --on-primary-container: #9f1239;
+  --theme-glow: rgba(225, 29, 72, 0.28);
+  --theme-shadow: rgba(225, 29, 72, 0.10);
 }
 
-/* Halloween Theme 🎃 (Мистическая тыква) */
-[data-theme="halloween"] {
-  --primary: #f97316;
-  --primary-hover: #ea580c;
-  --primary-light: rgba(249, 115, 22, 0.18);
-  --primary-container: #431407;
-  --on-primary-container: #ffedd5;
+/* Amber Theme (Осень) */
+[data-theme="amber"] {
+  --primary: #d97706;
+  --primary-hover: #b45309;
+  --primary-light: rgba(217, 119, 6, 0.13);
+  --primary-container: #fef3c7;
+  --on-primary-container: #78350f;
+  --theme-glow: rgba(217, 119, 6, 0.30);
+  --theme-shadow: rgba(217, 119, 6, 0.11);
+}
 
-  --bg: #0c0814;
-  --surface: #160f24;
-  --surface-variant: #211636;
-  --border: #32204d;
-
-  --text-main: #f8fafc;
-  --text-muted: #c084fc;
-
-  --badge-lecture-bg: rgba(249, 115, 22, 0.18);
-  --badge-lecture-text: #fb923c;
-  --badge-practice-bg: rgba(168, 85, 247, 0.18);
-  --badge-practice-text: #c084fc;
-  --badge-seminar-bg: rgba(234, 88, 12, 0.2);
-  --badge-seminar-text: #fdba74;
-  --badge-lab-bg: rgba(217, 70, 239, 0.2);
-  --badge-lab-text: #e879f9;
-
-  --joint-bg: rgba(234, 179, 8, 0.16);
-  --joint-text: #facc15;
+/* Arctic Theme (Арктика) */
+[data-theme="arctic"] {
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-light: rgba(2, 132, 199, 0.12);
+  --primary-container: #e0f2fe;
+  --on-primary-container: #0c4a6e;
+  --theme-glow: rgba(2, 132, 199, 0.28);
+  --theme-shadow: rgba(2, 132, 199, 0.10);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -98,6 +110,8 @@
     --primary-light: rgba(59, 130, 246, 0.18);
     --primary-container: #1e3a8a;
     --on-primary-container: #bfdbfe;
+    --theme-glow: rgba(59, 130, 246, 0.34);
+    --theme-shadow: rgba(59, 130, 246, 0.14);
 
     --badge-lecture-bg: rgba(56, 189, 248, 0.16);
     --badge-lecture-text: #38bdf8;
@@ -118,6 +132,8 @@
     --primary-light: rgba(16, 185, 129, 0.18);
     --primary-container: #064e3b;
     --on-primary-container: #a7f3d0;
+    --theme-glow: rgba(16, 185, 129, 0.34);
+    --theme-shadow: rgba(16, 185, 129, 0.14);
   }
 
   [data-theme="violet"] {
@@ -126,6 +142,8 @@
     --primary-light: rgba(167, 139, 250, 0.18);
     --primary-container: #4c1d95;
     --on-primary-container: #ddd6fe;
+    --theme-glow: rgba(167, 139, 250, 0.34);
+    --theme-shadow: rgba(167, 139, 250, 0.14);
   }
 
   [data-theme="rose"] {
@@ -134,19 +152,28 @@
     --primary-light: rgba(251, 113, 133, 0.18);
     --primary-container: #881337;
     --on-primary-container: #fecdd3;
+    --theme-glow: rgba(251, 113, 133, 0.34);
+    --theme-shadow: rgba(251, 113, 133, 0.14);
   }
 
-  [data-theme="halloween"] {
-    --bg: #0c0814;
-    --surface: #160f24;
-    --surface-variant: #211636;
-    --border: #32204d;
-    --text-main: #f8fafc;
-    --text-muted: #c084fc;
-    --primary: #f97316;
-    --primary-light: rgba(249, 115, 22, 0.22);
-    --primary-container: #431407;
-    --on-primary-container: #ffedd5;
+  [data-theme="amber"] {
+    --primary: #f59e0b;
+    --primary-hover: #d97706;
+    --primary-light: rgba(245, 158, 11, 0.18);
+    --primary-container: #78350f;
+    --on-primary-container: #fef3c7;
+    --theme-glow: rgba(245, 158, 11, 0.34);
+    --theme-shadow: rgba(245, 158, 11, 0.14);
+  }
+
+  [data-theme="arctic"] {
+    --primary: #38bdf8;
+    --primary-hover: #0ea5e9;
+    --primary-light: rgba(56, 189, 248, 0.18);
+    --primary-container: #0c4a6e;
+    --on-primary-container: #e0f2fe;
+    --theme-glow: rgba(56, 189, 248, 0.34);
+    --theme-shadow: rgba(56, 189, 248, 0.14);
   }
 }
 
@@ -160,6 +187,10 @@
 
 body {
   background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 86% 10%, var(--primary-light) 0%, transparent 42%),
+    radial-gradient(circle at 12% 88%, var(--primary-light) 0%, transparent 38%);
+  background-attachment: fixed;
   color: var(--text-main);
   min-height: 100vh;
   padding-bottom: env(safe-area-inset-bottom, 24px);
@@ -255,15 +286,36 @@ header {
   padding: 12px 16px 4px 16px;
 }
 
+.header-theme-emoji {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
 .status-banner {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: 14px 16px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 18px var(--theme-shadow);
   display: flex;
   align-items: center;
   gap: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.status-banner.clickable {
+  cursor: pointer;
+}
+
+.status-banner.clickable:active {
+  transform: scale(0.99);
+}
+
+.status-theme-emoji {
+  font-size: 24px;
+  line-height: 1;
 }
 
 .status-icon-box {
@@ -404,7 +456,7 @@ header {
   background-color: var(--primary);
   border-color: var(--primary);
   transform: scale(1.03);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 14px var(--theme-glow);
 }
 
 .day-pill.active .day-name,
@@ -609,6 +661,25 @@ header {
   font-weight: 600;
   padding: 8px 14px;
   border-radius: 10px;
+}
+
+.select-group-cta {
+  margin-top: 18px;
+  background-color: var(--primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--theme-glow);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.select-group-cta:active {
+  transform: scale(0.97);
+  opacity: 0.9;
 }
 
 /* Modals */
@@ -838,7 +909,7 @@ header {
 /* Theme Grid & Buttons */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -933,7 +1004,7 @@ header {
   background-color: var(--surface);
   border: 2px solid var(--border);
   border-radius: 12px;
-  padding: 10px 4px;
+  padding: 10px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -950,23 +1021,18 @@ header {
 .theme-btn.active {
   border-color: var(--primary);
   background-color: var(--primary-light);
-  transform: scale(1.04);
+  transform: scale(1.03);
 }
 
 .theme-swatch {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.theme-swatch-pumpkin {
-  background: transparent !important;
-  box-shadow: none;
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -976,78 +1042,128 @@ header {
   text-align: center;
 }
 
-/* Halloween Spooky Decorations */
-.halloween-decorations {
-  display: none;
+/* Interactive Floating Theme Emojis */
+.theme-decorations {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 35;
   overflow: hidden;
 }
 
-[data-theme="halloween"] .halloween-decorations {
-  display: block;
-}
-
-.spooky-item {
+.floating-emoji {
   position: absolute;
+  transform: translate(-50%, -50%);
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
   user-select: none;
-  opacity: 0.65;
-  filter: drop-shadow(0 2px 8px rgba(249, 115, 22, 0.35));
+  touch-action: manipulation;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
 }
 
-.pumpkin-top-right {
-  top: 75px;
-  right: 14px;
-  font-size: 26px;
-  animation: floatSpooky 4s ease-in-out infinite;
+.floating-emoji:hover {
+  background-color: var(--primary-light);
 }
 
-.pumpkin-bottom-left {
-  bottom: 80px;
-  left: 12px;
-  font-size: 28px;
-  animation: floatSpooky 5s ease-in-out infinite reverse;
+.floating-emoji:hover .floating-emoji-glyph {
+  opacity: 1;
 }
 
-.bat-mid-left {
-  top: 260px;
-  left: 8px;
-  font-size: 20px;
-  opacity: 0.45;
-  animation: batFlutter 6s ease-in-out infinite;
+.floating-emoji.spawning {
+  animation: emojiSpawn 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-.ghost-bottom-right {
-  bottom: 120px;
-  right: 14px;
-  font-size: 22px;
-  opacity: 0.45;
-  animation: floatSpooky 4.5s ease-in-out infinite 1s;
+.floating-emoji.popping {
+  pointer-events: none;
+  animation: emojiPop 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-@keyframes floatSpooky {
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-10px) rotate(6deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
+.floating-emoji-glyph {
+  display: inline-block;
+  font-size: var(--emoji-size, 26px);
+  line-height: 1;
+  opacity: var(--emoji-opacity, 0.74);
+  filter: drop-shadow(0 3px 10px var(--theme-glow));
+  transition: opacity 0.2s ease;
+  animation: emojiFloat var(--float-dur, 4.8s) ease-in-out var(--float-delay, 0s) infinite;
+  will-change: transform;
 }
 
-@keyframes batFlutter {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(8px, -14px) scale(1.08); }
-  100% { transform: translate(0, 0) scale(1); }
+@keyframes emojiFloat {
+  0% { transform: translate(0px, 0px) rotate(0deg); }
+  50% { transform: translate(var(--float-x, 5px), var(--float-y, -11px)) rotate(var(--float-rot, 7deg)); }
+  100% { transform: translate(0px, 0px) rotate(0deg); }
 }
 
-[data-theme="halloween"] .status-banner {
-  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.16);
-  border-color: rgba(249, 115, 22, 0.35);
+@keyframes emojiSpawn {
+  0% { transform: translate(-50%, -50%) scale(0.15); opacity: 0; }
+  65% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
 
-[data-theme="halloween"] .day-pill.active {
-  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
+@keyframes emojiPop {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  40% { transform: translate(-50%, -50%) scale(1.52); opacity: 0.95; }
+  100% { transform: translate(-50%, -50%) scale(0.12); opacity: 0; }
+}
+
+.emoji-pop-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2.5px solid var(--ring-color, var(--primary));
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.35);
+  animation: emojiRingExpand 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes emojiRingExpand {
+  0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0.85; }
+  100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
+}
+
+.emoji-burst-particle {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: emojiParticleBurst 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.emoji-burst-particle.spark {
+  border-radius: 0;
+  background: transparent !important;
+  font-size: 13px;
+  line-height: 1;
+}
+
+@keyframes emojiParticleBurst {
+  0% {
+    transform: translate(-50%, -50%) translate(0px, 0px) scale(0.75) rotate(0deg);
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--tx, 24px), var(--ty, -24px)) scale(0.15) rotate(var(--trot, 90deg));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-emoji-glyph {
+    animation: none;
+  }
 }
 
