@@ -17,6 +17,80 @@ const CONFIG = {
   corsProxy: 'https://api.allorigins.win/raw?url='
 };
 
+const LESSON_TYPE_REGEX = /\(\s*(практическ(?:ое|ие)\s+заняти[ея]|практ\.?\s*заняти[ея]|практик[аи]|практ|пр\.?\s*з|пр|лекци[яи]|лекц|лек|семинарск(?:ое|ие)\s+заняти[ея]|семинары|семинар|сем|лабораторн(?:ая|ые)\s+работ[аы]|лабораторн(?:ая|ые)|лаб|дифференцированн(?:ый)?\s*зач[её]т|диф\.?\s*зач[её]т|зач[её]т|экзамен|экз|консультаци[яи]|конс)\.?\s*\)/gi;
+const TEACHER_END_REGEX = /([А-ЯЁа-яё][а-яё]{1,}\s+[А-ЯЁ]\.+\s*[А-ЯЁ]\.*)\s*$/;
+
+function normalizeLessonTypeLabel(rawType) {
+  if (!rawType) return '';
+  const t = String(rawType).trim().toLowerCase();
+  if (t.startsWith('лек')) return 'Лекция';
+  if (t.startsWith('пр')) return 'Практическое занятие';
+  if (t.startsWith('сем')) return 'Семинар';
+  if (t.startsWith('лаб')) return 'Лабораторная';
+  if (t.includes('зач')) return 'Зачёт';
+  if (t.startsWith('экз')) return 'Экзамен';
+  if (t.startsWith('конс')) return 'Консультация';
+  return String(rawType).trim();
+}
+
+function cleanSubjectTextClient(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/^[,.;:\s-]+|[,;\s-]+$/g, '')
+    .trim();
+}
+
+function normalizeLessonRecord(lesson) {
+  if (!lesson || typeof lesson !== 'object') return lesson;
+  let lessonType = normalizeLessonTypeLabel(lesson.lessonType || '');
+  let clean = String(lesson.cleanSubject || lesson.subject || '').trim();
+
+  clean = clean.replace(LESSON_TYPE_REGEX, (_, rawType) => {
+    if (!lessonType) lessonType = normalizeLessonTypeLabel(rawType);
+    return ' ';
+  });
+
+  if (!lessonType && lesson.subject) {
+    String(lesson.subject).replace(LESSON_TYPE_REGEX, (_, rawType) => {
+      if (!lessonType) lessonType = normalizeLessonTypeLabel(rawType);
+      return ' ';
+    });
+  }
+
+  clean = cleanSubjectTextClient(clean);
+
+  let teacher = lesson.teacher || '';
+  if (!teacher) {
+    const tm = clean.match(TEACHER_END_REGEX);
+    if (tm) {
+      teacher = tm[1].trim();
+      clean = cleanSubjectTextClient(clean.substring(0, clean.length - tm[0].length));
+    }
+  }
+
+  return {
+    ...lesson,
+    cleanSubject: clean || String(lesson.subject || '').trim(),
+    lessonType,
+    teacher
+  };
+}
+
+function normalizeScheduleData(data) {
+  if (!data || typeof data !== 'object' || !data.schedules) return data;
+  for (const grp of Object.keys(data.schedules)) {
+    const days = data.schedules[grp]?.days;
+    if (!days || typeof days !== 'object') continue;
+    for (const dateStr of Object.keys(days)) {
+      if (Array.isArray(days[dateStr])) {
+        days[dateStr] = days[dateStr].map(normalizeLessonRecord);
+      }
+    }
+  }
+  return data;
+}
+
 const THEMES = [
   {
     id: 'blue',
@@ -601,7 +675,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v7') {
+        if (k !== 'mabiu-schedule-v8') {
           caches.delete(k);
         }
       });
@@ -614,7 +688,7 @@ async function initApp() {
     try {
       const parsed = JSON.parse(cachedJson);
       if (parsed && parsed.fileName && parsed.schedules && Object.keys(parsed.schedules).length > 0) {
-        scheduleData = parsed;
+        scheduleData = normalizeScheduleData(parsed);
       } else {
         localStorage.removeItem('mabiu_schedule_data');
       }
@@ -630,7 +704,7 @@ async function initApp() {
       let resp = await fetch(`./schedule.json?_t=${Date.now()}`);
       if (!resp.ok) resp = await fetch(`./data/schedule.json?_t=${Date.now()}`);
       if (resp.ok) {
-        scheduleData = await resp.json();
+        scheduleData = normalizeScheduleData(await resp.json());
         localStorage.setItem('mabiu_schedule_data', JSON.stringify(scheduleData));
       }
     } catch (err) {
@@ -691,6 +765,7 @@ async function initApp() {
       );
 
       if (shouldUpdate) {
+        bestFresh = normalizeScheduleData(bestFresh);
         scheduleData = bestFresh;
         localStorage.setItem('mabiu_schedule_data', JSON.stringify(bestFresh));
         if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
@@ -1582,36 +1657,30 @@ function parseLessonContentClient(rawText) {
   let teacher = '';
   let lessonType = '';
 
-  // Extract lesson type
-  const typeMatch = text.match(/\(\s*(лек|лекц|лекция|пр|практ|практика|семинар|лаб|зачет|зачёт|экзамен|конс)\.?\s*\)/i);
-  if (typeMatch) {
-    const t = typeMatch[1].toLowerCase();
-    if (t.startsWith('лек')) lessonType = 'Лекция';
-    else if (t.startsWith('пр')) lessonType = 'Практическое занятие';
-    else if (t.startsWith('сем')) lessonType = 'Семинар';
-    else if (t.startsWith('лаб')) lessonType = 'Лабораторная';
-    else if (t.startsWith('зач')) lessonType = 'Зачёт';
-    else if (t.startsWith('экз')) lessonType = 'Экзамен';
-    else lessonType = typeMatch[1];
-  }
-
-  // Extract room
+  // Extract room from end first
   const roomMatch = text.match(/(?:,\s*)?(?:(?:Ауд\.?|АУд\.?)\s*[\w\d/]*\s*(?:\([^)]+\))?|(?:Актовый\s*зал|Конференц[- ]*зал|Спорт\.?\s*зал|Он[- ]*лайн|ДО)(?:\s*\([^)]+\))?|\((?:Конференц[- ]*зал|Актовый\s*зал)\))\s*$/i);
   if (roomMatch) {
     room = roomMatch[0].replace(/^,\s*/, '').trim();
     text = text.substring(0, text.length - roomMatch[0].length).trim();
   }
 
+  // Extract and strip lesson-type parentheticals (e.g. "(Лекция)", "(Практическое занятие)")
+  text = text.replace(LESSON_TYPE_REGEX, (_, rawType) => {
+    if (!lessonType) lessonType = normalizeLessonTypeLabel(rawType);
+    return ' ';
+  });
+  text = cleanSubjectTextClient(text);
+
   // Extract teacher
-  const teacherMatch = text.match(/([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.+\s*[А-ЯЁ]\.*|\s+[А-ЯЁ][а-яё]+))\s*$/);
+  const teacherMatch = text.match(TEACHER_END_REGEX);
   if (teacherMatch) {
     teacher = teacherMatch[1].trim();
     text = text.substring(0, text.length - teacherMatch[0].length).trim();
   }
 
   // Subject is cleaned remainder
-  let cleanSubject = text.replace(/^[,.\s-]+|[,.\s-]+$/g, '').trim();
-  if (!cleanSubject) cleanSubject = rawText;
+  let cleanSubject = cleanSubjectTextClient(text);
+  if (!cleanSubject) cleanSubject = String(rawText || '').trim();
 
   return { cleanSubject, room, teacher, lessonType };
 }
@@ -1698,6 +1767,7 @@ async function checkYandexDiskUpdates(isManual = false) {
     }
 
     if (fetchedData && fetchedData.groups && fetchedData.groups.length > 0) {
+      fetchedData = normalizeScheduleData(fetchedData);
       scheduleData = fetchedData;
       localStorage.setItem('mabiu_schedule_data', JSON.stringify(fetchedData));
       if (currentGroup && !fetchedData.groups.includes(currentGroup)) {
@@ -1733,7 +1803,7 @@ async function resetSchedule() {
     let resp = await fetch('./schedule.json');
     if (!resp.ok) resp = await fetch('./data/schedule.json');
     if (resp.ok) {
-      scheduleData = await resp.json();
+      scheduleData = normalizeScheduleData(await resp.json());
       if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
         currentGroup = null;
         localStorage.removeItem('mabiu_group');
