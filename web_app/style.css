@@ -318,6 +318,20 @@ header {
   line-height: 1;
 }
 
+.status-fallback-icon {
+  display: none;
+}
+
+html[data-emojis="off"] .header-theme-emoji,
+html[data-emojis="off"] .status-theme-emoji,
+html[data-emojis="off"] .theme-decorations {
+  display: none !important;
+}
+
+html[data-emojis="off"] .status-fallback-icon {
+  display: block;
+}
+
 .status-icon-box {
   width: 46px;
   height: 46px;
@@ -975,6 +989,93 @@ header {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+/* Settings Toggle Card & Switch */
+.settings-toggle-card {
+  margin-top: 12px;
+  background-color: var(--surface-variant);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.settings-toggle-card:active {
+  opacity: 0.85;
+}
+
+.settings-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-toggle-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.settings-toggle-subtext {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: var(--border);
+  border-radius: 999px;
+  transition: background-color 0.22s ease;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Toast */

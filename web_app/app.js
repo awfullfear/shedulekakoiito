@@ -162,8 +162,11 @@ const storedGroupRaw = (localStorage.getItem('mabiu_group') || '').trim();
 let scheduleData = null;
 let currentGroup = storedGroupRaw || null;
 let currentTheme = getValidThemeId(localStorage.getItem('mabiu_theme'));
+let emojisEnabled = localStorage.getItem('mabiu_emojis_enabled') !== '0';
 let selectedDateStr = getTodayDateStr();
 let tickerTimerId = null;
+
+document.documentElement.setAttribute('data-emojis', emojisEnabled ? 'on' : 'off');
 
 // Floating emojis runtime state
 let activeFloatingEmojis = [];
@@ -182,6 +185,7 @@ const statusThemeEmoji = document.getElementById('statusThemeEmoji');
 const themeColorMeta = document.getElementById('themeColorMeta');
 const themeDecorations = document.getElementById('themeDecorations');
 const themeGrid = document.getElementById('themeGrid');
+const emojisToggle = document.getElementById('emojisToggle');
 
 const themeModal = document.getElementById('themeModal');
 const closeThemeModalBtn = document.getElementById('closeThemeModalBtn');
@@ -453,7 +457,7 @@ function popFloatingEmoji(item, theme, gen) {
 }
 
 function spawnSingleFloatingEmoji(theme, gen, opts = {}) {
-  if (!themeDecorations || gen !== emojiGeneration) return;
+  if (!themeDecorations || !emojisEnabled || gen !== emojiGeneration) return;
 
   const slot = pickFloatingSlot(
     opts.avoidSlotIndex !== undefined ? opts.avoidSlotIndex : -1,
@@ -511,6 +515,7 @@ function spawnSingleFloatingEmoji(theme, gen, opts = {}) {
 
 function clearFloatingEmojis() {
   emojiGeneration += 1;
+  appliedDecorationTheme = null;
   emojiSpawnTimers.forEach((id) => clearTimeout(id));
   emojiSpawnTimers.clear();
   activeFloatingEmojis = [];
@@ -520,18 +525,42 @@ function clearFloatingEmojis() {
 }
 
 function renderFloatingEmojisForTheme(theme) {
-  if (!themeDecorations) return;
   clearFloatingEmojis();
+  if (!themeDecorations || !emojisEnabled) return;
+  appliedDecorationTheme = theme.id;
   const gen = emojiGeneration;
   const targetCount = (window.innerWidth || 390) >= 600 ? 5 : 4;
 
   for (let i = 0; i < targetCount; i++) {
     const tId = setTimeout(() => {
       emojiSpawnTimers.delete(tId);
-      if (gen !== emojiGeneration) return;
+      if (gen !== emojiGeneration || !emojisEnabled) return;
       spawnSingleFloatingEmoji(theme, gen);
     }, i * 90);
     emojiSpawnTimers.add(tId);
+  }
+}
+
+function setEmojisEnabled(enabled, notify = true) {
+  emojisEnabled = Boolean(enabled);
+  localStorage.setItem('mabiu_emojis_enabled', emojisEnabled ? '1' : '0');
+  document.documentElement.setAttribute('data-emojis', emojisEnabled ? 'on' : 'off');
+  if (emojisToggle) {
+    emojisToggle.checked = emojisEnabled;
+  }
+
+  if (emojisEnabled) {
+    renderFloatingEmojisForTheme(getThemeById(currentTheme));
+  } else {
+    clearFloatingEmojis();
+  }
+
+  if (typeof updateTickerOnce === 'function') {
+    updateTickerOnce();
+  }
+
+  if (notify) {
+    showToast(emojisEnabled ? 'Смайлики включены' : 'Смайлики отключены');
   }
 }
 
@@ -594,17 +623,18 @@ function applyTheme(themeId, notify = false) {
   // Status banner icon emoji matching theme
   if (statusThemeEmoji) {
     statusThemeEmoji.textContent = theme.emoji;
-  } else if (statusIconBox) {
-    statusIconBox.innerHTML = `<span id="statusThemeEmoji" class="status-theme-emoji">${theme.emoji}</span>`;
   }
 
-  if (appliedDecorationTheme !== safeId) {
-    appliedDecorationTheme = safeId;
-    renderFloatingEmojisForTheme(theme);
+  if (emojisEnabled) {
+    if (appliedDecorationTheme !== safeId) {
+      renderFloatingEmojisForTheme(theme);
+    }
+  } else {
+    clearFloatingEmojis();
   }
 
   if (notify) {
-    showToast(`Тема: ${theme.emoji} ${theme.name}`);
+    showToast(emojisEnabled ? `Тема: ${theme.emoji} ${theme.name}` : `Тема: ${theme.name}`);
   }
 }
 
@@ -667,6 +697,7 @@ function updateGroupLabelUI() {
 
 async function initApp() {
   renderThemeGrid();
+  setEmojisEnabled(emojisEnabled, false);
   applyTheme(currentTheme, false);
   updateGroupLabelUI();
   if (diskSourceLabel) diskSourceLabel.textContent = CONFIG.yandexKeyId;
@@ -675,7 +706,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v8') {
+        if (k !== 'mabiu-schedule-v9') {
           caches.delete(k);
         }
       });
@@ -1179,7 +1210,7 @@ function updateTickerOnce() {
     statusBadge.textContent = 'Выходной';
     statusBadge.style.color = 'var(--text-muted)';
     statusBadge.style.backgroundColor = 'var(--surface-variant)';
-    statusTitle.textContent = 'Сегодня занятий нет 🎉';
+    statusTitle.textContent = emojisEnabled ? 'Сегодня занятий нет 🎉' : 'Сегодня занятий нет';
     statusSubtitle.textContent = nextInfo || 'Расписание на следующие дни пока не загружено';
     return;
   }
@@ -1883,6 +1914,11 @@ function setupEventListeners() {
   settingsModal.addEventListener('click', (e) => {
     if (e.target === settingsModal) closeSettingsModal();
   });
+  if (emojisToggle) {
+    emojisToggle.addEventListener('change', (e) => {
+      setEmojisEnabled(e.target.checked, true);
+    });
+  }
 
   // Action buttons
   refreshBtn.addEventListener('click', () => checkYandexDiskUpdates(true));

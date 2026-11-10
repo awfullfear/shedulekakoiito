@@ -20,7 +20,7 @@
   <link rel="manifest" href="./manifest.json">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="./style.css?v=8">
+  <link rel="stylesheet" href="./style.css?v=9">
 </head>
 <body>
   <div class="app-container">
@@ -64,6 +64,10 @@
       <div id="statusBanner" class="status-banner">
         <div id="statusIconBox" class="status-icon-box">
           <span id="statusThemeEmoji" class="status-theme-emoji">🌊</span>
+          <svg id="statusFallbackIcon" class="status-fallback-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
         </div>
         <div class="status-content">
           <div id="statusBadge" class="status-badge">Загрузка...</div>
@@ -151,6 +155,16 @@
           <div id="themeGrid" class="theme-grid">
             <!-- Rendered dynamically by app.js -->
           </div>
+          <label class="settings-toggle-card" for="emojisToggle">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-title">Показывать смайлики</span>
+              <span class="settings-toggle-subtext">Плавающие и декоративные смайлики темы</span>
+            </div>
+            <span class="toggle-switch">
+              <input type="checkbox" id="emojisToggle" checked>
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </span>
+          </label>
         </div>
 
         <!-- Manual File Upload -->
@@ -213,6 +227,6 @@
   <!-- SheetJS for local parsing of .xlsx on client -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Main Application Logic -->
-  <script src="./app.js?v=8"></script>
+  <script src="./app.js?v=9"></script>
 </body>
 </html>
