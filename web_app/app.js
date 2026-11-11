@@ -909,7 +909,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v10') {
+        if (k !== 'mabiu-schedule-v11') {
           caches.delete(k);
         }
       });
@@ -1352,10 +1352,18 @@ function updateLessonCardsProgress(now = new Date()) {
   const cards = lessonsList.querySelectorAll('.lesson-card');
   if (cards.length === 0) return;
 
-  const isViewingToday = (selectedDateStr === getTodayDateStr());
+  const todayStr = getTodayDateStr();
+  const isPastDay = selectedDateStr < todayStr;
+  const isViewingToday = (selectedDateStr === todayStr);
   const currentTimeInSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
   cards.forEach((card) => {
+    if (isPastDay) {
+      card.classList.remove('lesson-active');
+      card.classList.add('lesson-finished');
+      return;
+    }
+
     const startSec = parseInt(card.dataset.startSec || '', 10);
     const endSec = parseInt(card.dataset.endSec || '', 10);
 

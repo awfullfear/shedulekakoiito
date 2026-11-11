@@ -533,6 +533,7 @@ html[data-emojis="off"] .status-fallback-icon {
 
 .lesson-card.lesson-finished {
   opacity: 0.65;
+  filter: grayscale(0.35);
 }
 
 .lesson-progress {
