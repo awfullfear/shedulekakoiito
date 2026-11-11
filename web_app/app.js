@@ -91,6 +91,206 @@ function normalizeScheduleData(data) {
   return data;
 }
 
+const SCHEDULE_HISTORY_DAYS = 7;
+
+function shiftDateStr(dateStr, deltaDays) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  return dt.toISOString().slice(0, 10);
+}
+
+function collectCoveredDates(data) {
+  const dates = new Set();
+  if (!data || typeof data !== 'object') return dates;
+  if (Array.isArray(data.coveredDates)) {
+    for (const d of data.coveredDates) {
+      if (d) dates.add(d);
+    }
+  }
+  if (data.schedules && typeof data.schedules === 'object') {
+    for (const gdata of Object.values(data.schedules)) {
+      if (gdata && typeof gdata === 'object' && gdata.days && typeof gdata.days === 'object') {
+        for (const d of Object.keys(gdata.days)) {
+          if (d) dates.add(d);
+        }
+      }
+    }
+  }
+  return dates;
+}
+
+function pruneScheduleData(data, retainDays = SCHEDULE_HISTORY_DAYS, refTodayStr = getTodayDateStr()) {
+  if (!data || typeof data !== 'object') return data;
+  const cutoffStr = shiftDateStr(refTodayStr, -retainDays);
+  const prunedSchedules = {};
+  const srcSchedules = data.schedules || {};
+
+  for (const grp of Object.keys(srcSchedules)) {
+    const gdata = srcSchedules[grp];
+    if (!gdata || typeof gdata !== 'object') continue;
+    const days = gdata.days || {};
+    const keptDays = {};
+    for (const d of Object.keys(days).sort()) {
+      if (d >= cutoffStr) {
+        keptDays[d] = days[d];
+      }
+    }
+    const nextGroupObj = { ...gdata, days: keptDays };
+    if (Array.isArray(gdata.availableDates)) {
+      nextGroupObj.availableDates = Object.keys(keptDays).sort();
+    }
+    prunedSchedules[grp] = nextGroupObj;
+  }
+
+  const covered = Array.from(collectCoveredDates(data))
+    .filter(d => d >= cutoffStr)
+    .sort();
+
+  return {
+    ...data,
+    coveredDates: covered,
+    schedules: prunedSchedules
+  };
+}
+
+function mergeScheduleData(baseData, incomingData, options = {}) {
+  const retainDays = options.retainDays !== undefined ? options.retainDays : SCHEDULE_HISTORY_DAYS;
+  const refTodayStr = options.todayStr || getTodayDateStr();
+  const cutoffStr = shiftDateStr(refTodayStr, -retainDays);
+
+  if (!incomingData || !incomingData.schedules || Object.keys(incomingData.schedules).length === 0) {
+    return baseData ? pruneScheduleData(baseData, retainDays, refTodayStr) : incomingData;
+  }
+  if (!baseData || !baseData.schedules || Object.keys(baseData.schedules).length === 0) {
+    return pruneScheduleData(incomingData, retainDays, refTodayStr);
+  }
+
+  const incomingCovered = collectCoveredDates(incomingData);
+  const baseCovered = collectCoveredDates(baseData);
+
+  const mergedSchedules = {};
+  const baseScheds = baseData.schedules || {};
+  const incScheds = incomingData.schedules || {};
+  const incomingGroups = Array.isArray(incomingData.groups) ? [...incomingData.groups] : [];
+  const mergedGroups = [...incomingGroups];
+
+  if (Array.isArray(baseData.groups)) {
+    for (const g of baseData.groups) {
+      if (!mergedGroups.includes(g)) {
+        const hasRetained = Object.keys(baseScheds[g]?.days || {}).some(d => d >= cutoffStr && !incomingCovered.has(d));
+        if (hasRetained) mergedGroups.push(g);
+      }
+    }
+  }
+
+  const allGroupKeys = new Set([
+    ...mergedGroups,
+    ...Object.keys(baseScheds),
+    ...Object.keys(incScheds)
+  ]);
+
+  for (const g of allGroupKeys) {
+    const mergedDays = {};
+    const baseDays = baseScheds[g]?.days || {};
+    const incDays = incScheds[g]?.days || {};
+
+    for (const d of Object.keys(baseDays)) {
+      if (d >= cutoffStr && !incomingCovered.has(d)) {
+        mergedDays[d] = baseDays[d];
+      }
+    }
+    for (const d of Object.keys(incDays)) {
+      if (d >= cutoffStr) {
+        mergedDays[d] = incDays[d];
+      }
+    }
+
+    const sortedDays = {};
+    for (const d of Object.keys(mergedDays).sort()) {
+      sortedDays[d] = mergedDays[d];
+    }
+    if (incomingGroups.includes(g) || Object.keys(sortedDays).length > 0) {
+      mergedSchedules[g] = { days: sortedDays };
+    }
+  }
+
+  const mergedCovered = Array.from(new Set([...baseCovered, ...incomingCovered]))
+    .filter(d => d >= cutoffStr)
+    .sort();
+
+  const mergedSourceSignature = incomingData.sourceSignature !== undefined
+    ? incomingData.sourceSignature
+    : baseData.sourceSignature;
+
+  return {
+    ...baseData,
+    ...incomingData,
+    lastUpdated: Math.max(baseData.lastUpdated || 0, incomingData.lastUpdated || 0),
+    groups: mergedGroups,
+    coveredDates: mergedCovered,
+    sourceSignature: mergedSourceSignature,
+    schedules: mergedSchedules
+  };
+}
+
+function countRecentWorkdays(data, refTodayStr = getTodayDateStr()) {
+  const covered = collectCoveredDates(data);
+  const [y, m, d] = String(refTodayStr).split('-').map(Number);
+  const todayUtc = new Date(Date.UTC(y, m - 1, d));
+  let recentWorkdays = 0;
+  for (let offset = 0; offset < 7; offset++) {
+    const dt = new Date(todayUtc);
+    dt.setUTCDate(dt.getUTCDate() - offset);
+    if (dt.getUTCDay() !== 0 && covered.has(dt.toISOString().slice(0, 10))) {
+      recentWorkdays += 1;
+    }
+  }
+  return recentWorkdays;
+}
+
+function needsRecentCoverage(data, refTodayStr = getTodayDateStr()) {
+  const covered = collectCoveredDates(data);
+  const [y, m, d] = String(refTodayStr).split('-').map(Number);
+  const todayUtc = new Date(Date.UTC(y, m - 1, d));
+  const todayDow = todayUtc.getUTCDay();
+  if (todayDow !== 0 && !covered.has(refTodayStr)) {
+    return true;
+  }
+  return countRecentWorkdays(data, refTodayStr) < 3;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  if (typeof AbortController === 'undefined') {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timerId);
+  }
+}
+
+function saveScheduleDataSafe(data) {
+  const trySave = (obj) => {
+    localStorage.setItem('mabiu_schedule_data', JSON.stringify(obj));
+    return obj;
+  };
+  try {
+    return trySave(data);
+  } catch (err) {
+    for (const days of [3, 1, 0]) {
+      try {
+        const trimmed = pruneScheduleData(data, days);
+        return trySave(trimmed);
+      } catch (_) {}
+    }
+    console.warn('Unable to cache schedule in localStorage:', err);
+    return data;
+  }
+}
+
 const THEMES = [
   {
     id: 'blue',
@@ -555,6 +755,9 @@ function setEmojisEnabled(enabled, notify = true) {
     clearFloatingEmojis();
   }
 
+  if (typeof renderLessons === 'function' && lessonsList) {
+    renderLessons();
+  }
   if (typeof updateTickerOnce === 'function') {
     updateTickerOnce();
   }
@@ -706,20 +909,21 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v9') {
+        if (k !== 'mabiu-schedule-v10') {
           caches.delete(k);
         }
       });
     }).catch(() => {});
   }
 
-  // 1. Try loading cached custom schedule from localStorage
+  // 1. Try loading cached schedule from localStorage (preserving 7-day rolling history)
   const cachedJson = localStorage.getItem('mabiu_schedule_data');
   if (cachedJson) {
     try {
       const parsed = JSON.parse(cachedJson);
       if (parsed && parsed.fileName && parsed.schedules && Object.keys(parsed.schedules).length > 0) {
-        scheduleData = normalizeScheduleData(parsed);
+        scheduleData = pruneScheduleData(normalizeScheduleData(parsed));
+        saveScheduleDataSafe(scheduleData);
       } else {
         localStorage.removeItem('mabiu_schedule_data');
       }
@@ -735,8 +939,8 @@ async function initApp() {
       let resp = await fetch(`./schedule.json?_t=${Date.now()}`);
       if (!resp.ok) resp = await fetch(`./data/schedule.json?_t=${Date.now()}`);
       if (resp.ok) {
-        scheduleData = normalizeScheduleData(await resp.json());
-        localStorage.setItem('mabiu_schedule_data', JSON.stringify(scheduleData));
+        scheduleData = pruneScheduleData(normalizeScheduleData(await resp.json()));
+        saveScheduleDataSafe(scheduleData);
       }
     } catch (err) {
       console.error('Failed to load bundled schedule.json:', err);
@@ -789,16 +993,25 @@ async function initApp() {
         } catch (_) {}
       }
 
-      const shouldUpdate = bestFresh && (
-        !scheduleData ||
-        (bestFresh.lastUpdated && bestFresh.lastUpdated > (scheduleData.lastUpdated || 0)) ||
-        bestFresh.fileName !== scheduleData.fileName
+      const hasExistingSchedules = Boolean(
+        scheduleData && scheduleData.schedules && Object.keys(scheduleData.schedules).length > 0
+      );
+      const freshHasSchedules = Boolean(
+        bestFresh && bestFresh.schedules && Object.keys(bestFresh.schedules).length > 0
+      );
+      const shouldUpdate = freshHasSchedules && (
+        !hasExistingSchedules ||
+        (bestFresh.lastUpdated && bestFresh.lastUpdated > (scheduleData.lastUpdated || 0))
       );
 
       if (shouldUpdate) {
-        bestFresh = normalizeScheduleData(bestFresh);
-        scheduleData = bestFresh;
-        localStorage.setItem('mabiu_schedule_data', JSON.stringify(bestFresh));
+        const prevSignature = scheduleData?.sourceSignature;
+        bestFresh = pruneScheduleData(normalizeScheduleData(bestFresh));
+        scheduleData = mergeScheduleData(scheduleData, bestFresh);
+        if (!bestFresh.sourceSignature && prevSignature && bestFresh.fileName === scheduleData.fileName) {
+          scheduleData.sourceSignature = prevSignature;
+        }
+        saveScheduleDataSafe(scheduleData);
         if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
           currentGroup = null;
           localStorage.removeItem('mabiu_group');
@@ -992,7 +1205,7 @@ function renderLessons() {
             '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>'
           }
         </svg>
-        <div class="empty-title">${isWeekend ? 'Выходной день 🌴' : 'Пар нет 🎉'}</div>
+        <div class="empty-title">${isWeekend ? (emojisEnabled ? 'Выходной день 🌴' : 'Выходной день') : (emojisEnabled ? 'Пар нет 🎉' : 'Пар нет')}</div>
         <div class="empty-desc">${isWeekend ? 'В этот день занятий нет, можно отдохнуть!' : 'На этот день занятий не запланировано.'}</div>
         ${nextLessonsInfo ? `<div class="next-lessons-pill">${nextLessonsInfo}</div>` : ''}
       </div>
@@ -1426,8 +1639,12 @@ async function handleManualFile(file) {
       throw new Error('В файле не найдено групп набора 26');
     }
 
-    scheduleData = parsedData;
-    localStorage.setItem('mabiu_schedule_data', JSON.stringify(parsedData));
+    const normalizedIncoming = pruneScheduleData(normalizeScheduleData(parsedData));
+    scheduleData = mergeScheduleData(scheduleData, normalizedIncoming);
+    scheduleData.fileName = parsedData.fileName;
+    scheduleData.lastUpdated = Date.now();
+    scheduleData.sourceSignature = `manual:${file.name}:${file.lastModified || Date.now()}`;
+    saveScheduleDataSafe(scheduleData);
 
     // Validate previously selected group (do not auto-pick if unset)
     if (currentGroup && !scheduleData.groups.includes(currentGroup)) {
@@ -1629,6 +1846,7 @@ function parseWorkbookClient(arrayBuffer, fileName) {
     fileName: fileName,
     yandexDiskUrl: CONFIG.yandexPublicKey,
     groups: allGroups,
+    coveredDates: Object.keys(rawRowsByDate).sort(),
     schedules: schedules
   };
 }
@@ -1718,29 +1936,88 @@ function parseLessonContentClient(rawText) {
 
 // --- Sync with Yandex.Disk ---
 
+let isYandexSyncRunning = false;
+
+async function downloadAndParseXlsxClient(fileItem) {
+  if (!fileItem || !fileItem.file) return null;
+
+  let arrayBuffer = null;
+  try {
+    const fileResp = await fetchWithTimeout(fileItem.file, { referrerPolicy: 'no-referrer', cache: 'no-store' }, 12000);
+    if (fileResp.ok) {
+      arrayBuffer = await fileResp.arrayBuffer();
+    }
+  } catch (_) {}
+
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    const proxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(fileItem.file)}`,
+      `https://corsproxy.org/?${encodeURIComponent(fileItem.file)}`
+    ];
+    for (const pUrl of proxies) {
+      try {
+        const fileResp = await fetchWithTimeout(pUrl, { referrerPolicy: 'no-referrer' }, 7000);
+        if (fileResp.ok) {
+          arrayBuffer = await fileResp.arrayBuffer();
+          if (arrayBuffer && arrayBuffer.byteLength > 0) break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) return null;
+
+  try {
+    const parsed = parseWorkbookClient(arrayBuffer, fileItem.name || 'schedule.xlsx');
+    if (parsed && parsed.groups && parsed.groups.length > 0) {
+      return normalizeScheduleData(parsed);
+    }
+  } catch (err) {
+    console.warn(`Failed to parse workbook ${fileItem.name}:`, err);
+  }
+  return null;
+}
+
 async function checkYandexDiskUpdates(isManual = false) {
+  if (isYandexSyncRunning) {
+    if (isManual) showToast('Синхронизация уже выполняется...');
+    return;
+  }
+
+  isYandexSyncRunning = true;
   if (refreshBtn) refreshBtn.classList.add('spinning');
   if (isManual) showToast('Проверка Яндекс.Диска...');
 
   try {
+    let apiData = null;
     // 1. First try Vercel Serverless API (/api/schedule)
-    let fetchedData = null;
     try {
-      const resp = await fetch('./api/schedule');
-      if (resp.ok) {
-        fetchedData = await resp.json();
+      const resp = await fetchWithTimeout('./api/schedule', {}, 4000);
+      const contentType = resp.headers.get('content-type') || '';
+      if (resp.ok && contentType.includes('json')) {
+        const raw = await resp.json();
+        if (raw && raw.groups && raw.groups.length > 0 && raw.schedules) {
+          apiData = pruneScheduleData(normalizeScheduleData(raw));
+        }
       }
     } catch (e) {
       // Local or static GitHub Pages fallback
     }
 
+    let nextSchedule = null;
+    const baseBeforeSync = apiData ? mergeScheduleData(scheduleData, apiData) : scheduleData;
+
+    if (apiData && !needsRecentCoverage(baseBeforeSync)) {
+      nextSchedule = baseBeforeSync;
+    }
+
     // 2. Direct Yandex API fetch or fallback to CORS proxy
-    if (!fetchedData) {
+    if (!nextSchedule) {
       const yandexApi = `https://cloud-api.yandex.net/v1/disk/public/resources?public_key=${encodeURIComponent(CONFIG.yandexPublicKey)}&limit=100`;
       let diskJson = null;
 
       try {
-        const resp = await fetch(yandexApi, { referrerPolicy: 'no-referrer' });
+        const resp = await fetchWithTimeout(yandexApi, { referrerPolicy: 'no-referrer' }, 10000);
         if (resp.ok) {
           diskJson = await resp.json();
         }
@@ -1750,7 +2027,7 @@ async function checkYandexDiskUpdates(isManual = false) {
 
       if (!diskJson) {
         try {
-          const proxyResp = await fetch(CONFIG.corsProxy + encodeURIComponent(yandexApi));
+          const proxyResp = await fetchWithTimeout(CONFIG.corsProxy + encodeURIComponent(yandexApi), {}, 7000);
           if (proxyResp.ok) {
             const rawJson = await proxyResp.json();
             diskJson = typeof rawJson.contents === 'string' ? JSON.parse(rawJson.contents) : rawJson;
@@ -1764,44 +2041,78 @@ async function checkYandexDiskUpdates(isManual = false) {
         if (xlsxFiles.length > 0) {
           xlsxFiles.sort((a, b) => new Date(b.modified || 0) - new Date(a.modified || 0));
           const latestFile = xlsxFiles[0];
+          const latestSig = `${latestFile.name}|${latestFile.modified || ''}`;
 
-          // Download latest xlsx (direct with no-referrer prevents Yandex hotlink 403, with fallback)
-          let arrayBuffer = null;
-          try {
-            const fileResp = await fetch(latestFile.file, { referrerPolicy: 'no-referrer', cache: 'no-store' });
-            if (fileResp.ok) {
-              arrayBuffer = await fileResp.arrayBuffer();
-            }
-          } catch (_) {}
+          const alreadyUpToDate = (
+            !isManual &&
+            baseBeforeSync &&
+            baseBeforeSync.sourceSignature === latestSig &&
+            !needsRecentCoverage(baseBeforeSync)
+          );
 
-          if (!arrayBuffer) {
-            const proxies = [
-              `https://api.allorigins.win/raw?url=${encodeURIComponent(latestFile.file)}`,
-              `https://corsproxy.org/?${encodeURIComponent(latestFile.file)}`
-            ];
-            for (const pUrl of proxies) {
-              try {
-                const fileResp = await fetch(pUrl, { referrerPolicy: 'no-referrer' });
-                if (fileResp.ok) {
-                  arrayBuffer = await fileResp.arrayBuffer();
-                  if (arrayBuffer && arrayBuffer.byteLength > 0) break;
+          if (alreadyUpToDate) {
+            if (apiData) nextSchedule = baseBeforeSync;
+          } else {
+            const latestParsed = await downloadAndParseXlsxClient(latestFile);
+            if (latestParsed) {
+              latestParsed.sourceSignature = latestSig;
+              let mergedCandidate = mergeScheduleData(baseBeforeSync, latestParsed);
+
+              const todayStr = getTodayDateStr();
+              const [ty, tm, td] = todayStr.split('-').map(Number);
+              const isTodaySunday = new Date(Date.UTC(ty, tm - 1, td)).getUTCDay() === 0;
+              const latestMissesToday = !isTodaySunday && !collectCoveredDates(latestParsed).has(todayStr);
+              const prevFile = xlsxFiles[1];
+              const prevModMs = prevFile ? (new Date(prevFile.modified || 0).getTime() || 0) : 0;
+              const baseUpdatedMs = baseBeforeSync?.lastUpdated || 0;
+
+              const shouldBackfill = xlsxFiles.length > 1 && (
+                needsRecentCoverage(mergedCandidate, todayStr) ||
+                (latestMissesToday && prevModMs > baseUpdatedMs && baseBeforeSync?.sourceSignature !== latestSig)
+              );
+
+              if (shouldBackfill) {
+                const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+                const recentFallbacks = xlsxFiles
+                  .slice(1, 4)
+                  .filter(it => !it.modified || (Date.now() - new Date(it.modified).getTime()) <= maxAgeMs);
+
+                const olderParsedList = [];
+                for (const fbItem of recentFallbacks) {
+                  const fbParsed = await downloadAndParseXlsxClient(fbItem);
+                  if (fbParsed) {
+                    olderParsedList.push(fbParsed);
+                    let rebuilt = baseBeforeSync;
+                    for (let idx = olderParsedList.length - 1; idx >= 0; idx--) {
+                      rebuilt = mergeScheduleData(rebuilt, olderParsedList[idx]);
+                    }
+                    mergedCandidate = mergeScheduleData(rebuilt, latestParsed);
+                    const curMissesToday = !isTodaySunday && !collectCoveredDates(mergedCandidate).has(todayStr);
+                    if (!curMissesToday && countRecentWorkdays(mergedCandidate, todayStr) >= 5) {
+                      break;
+                    }
+                  }
                 }
-              } catch (_) {}
-            }
-          }
+              }
 
-          if (arrayBuffer && arrayBuffer.byteLength > 0) {
-            fetchedData = parseWorkbookClient(arrayBuffer, latestFile.name);
+              mergedCandidate.fileName = latestParsed.fileName;
+              mergedCandidate.sourceSignature = latestSig;
+              mergedCandidate.lastUpdated = Date.now();
+              nextSchedule = mergedCandidate;
+            } else if (apiData) {
+              nextSchedule = baseBeforeSync;
+            }
           }
         }
+      } else if (apiData) {
+        nextSchedule = baseBeforeSync;
       }
     }
 
-    if (fetchedData && fetchedData.groups && fetchedData.groups.length > 0) {
-      fetchedData = normalizeScheduleData(fetchedData);
-      scheduleData = fetchedData;
-      localStorage.setItem('mabiu_schedule_data', JSON.stringify(fetchedData));
-      if (currentGroup && !fetchedData.groups.includes(currentGroup)) {
+    if (nextSchedule && nextSchedule.groups && nextSchedule.groups.length > 0) {
+      scheduleData = pruneScheduleData(normalizeScheduleData(nextSchedule));
+      saveScheduleDataSafe(scheduleData);
+      if (currentGroup && !scheduleData.groups.includes(currentGroup)) {
         currentGroup = null;
         localStorage.removeItem('mabiu_group');
         updateGroupLabelUI();
@@ -1822,6 +2133,7 @@ async function checkYandexDiskUpdates(isManual = false) {
     console.warn('Sync attempt finished:', err);
     if (isManual) showToast('Синхронизация завершена. Используются актуальные данные.');
   } finally {
+    isYandexSyncRunning = false;
     if (refreshBtn) refreshBtn.classList.remove('spinning');
   }
 }
@@ -1834,7 +2146,8 @@ async function resetSchedule() {
     let resp = await fetch('./schedule.json');
     if (!resp.ok) resp = await fetch('./data/schedule.json');
     if (resp.ok) {
-      scheduleData = normalizeScheduleData(await resp.json());
+      scheduleData = pruneScheduleData(normalizeScheduleData(await resp.json()));
+      saveScheduleDataSafe(scheduleData);
       if (currentGroup && scheduleData.groups && !scheduleData.groups.includes(currentGroup)) {
         currentGroup = null;
         localStorage.removeItem('mabiu_group');
