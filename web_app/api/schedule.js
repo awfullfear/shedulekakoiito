@@ -172,6 +172,7 @@ function parseWorkbook(buffer, fileName = '') {
     }
 
     const schedulesByGroup = {};
+    const coveredDatesSet = new Set();
     for (const g of allGroups) {
         schedulesByGroup[g] = { days: {}, availableDates: [] };
     }
@@ -179,6 +180,7 @@ function parseWorkbook(buffer, fileName = '') {
     for (let i = 0; i < finalDateRows.length; i++) {
         const startR = finalDateRows[i].r;
         const dateStr = finalDateRows[i].date;
+        if (dateStr) coveredDatesSet.add(dateStr);
         const endR = i + 1 < finalDateRows.length ? finalDateRows[i + 1].r : Math.min(startR + 25, range.e.r + 1);
 
         const rowTimes = {};
@@ -282,7 +284,147 @@ function parseWorkbook(buffer, fileName = '') {
         schedulesByGroup[g].availableDates.sort();
     }
 
-    return { groups: allGroups, schedules: schedulesByGroup };
+    return {
+        groups: allGroups,
+        coveredDates: Array.from(coveredDatesSet).sort(),
+        schedules: schedulesByGroup
+    };
+}
+
+const HISTORY_RETENTION_DAYS = 7;
+
+function getMskTodayStr() {
+    const mskNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    return mskNow.toISOString().slice(0, 10);
+}
+
+function shiftDateStr(dateStr, deltaDays) {
+    const [y, m, d] = String(dateStr).split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+    return dt.toISOString().slice(0, 10);
+}
+
+function collectCoveredDates(data) {
+    const dates = new Set();
+    if (!data || typeof data !== 'object') return dates;
+    if (Array.isArray(data.coveredDates)) {
+        for (const d of data.coveredDates) {
+            if (d) dates.add(d);
+        }
+    }
+    if (data.schedules && typeof data.schedules === 'object') {
+        for (const gdata of Object.values(data.schedules)) {
+            if (gdata && typeof gdata === 'object' && gdata.days && typeof gdata.days === 'object') {
+                for (const d of Object.keys(gdata.days)) {
+                    if (d) dates.add(d);
+                }
+            }
+        }
+    }
+    return dates;
+}
+
+function pruneScheduleData(data, retainDays = HISTORY_RETENTION_DAYS, refTodayStr = getMskTodayStr()) {
+    if (!data || typeof data !== 'object') return data;
+    const cutoffStr = shiftDateStr(refTodayStr, -retainDays);
+    const prunedSchedules = {};
+    for (const [g, gdata] of Object.entries(data.schedules || {})) {
+        if (!gdata || typeof gdata !== 'object') continue;
+        const keptDays = {};
+        for (const d of Object.keys(gdata.days || {}).sort()) {
+            if (d >= cutoffStr) keptDays[d] = gdata.days[d];
+        }
+        prunedSchedules[g] = {
+            days: keptDays,
+            availableDates: Object.keys(keptDays).sort()
+        };
+    }
+    const covered = Array.from(collectCoveredDates(data)).filter(d => d >= cutoffStr).sort();
+    return {
+        ...data,
+        coveredDates: covered,
+        schedules: prunedSchedules
+    };
+}
+
+function mergeScheduleData(baseData, incomingData, retainDays = HISTORY_RETENTION_DAYS, refTodayStr = getMskTodayStr()) {
+    const cutoffStr = shiftDateStr(refTodayStr, -retainDays);
+    if (!incomingData || !incomingData.schedules || Object.keys(incomingData.schedules).length === 0) {
+        return baseData ? pruneScheduleData(baseData, retainDays, refTodayStr) : incomingData;
+    }
+    if (!baseData || !baseData.schedules || Object.keys(baseData.schedules).length === 0) {
+        return pruneScheduleData(incomingData, retainDays, refTodayStr);
+    }
+
+    const incomingCovered = collectCoveredDates(incomingData);
+    const baseCovered = collectCoveredDates(baseData);
+    const baseScheds = baseData.schedules || {};
+    const incScheds = incomingData.schedules || {};
+
+    const incomingGroups = Array.isArray(incomingData.groups) ? [...incomingData.groups] : [];
+    const mergedGroups = [...incomingGroups];
+    for (const g of baseData.groups || []) {
+        if (!mergedGroups.includes(g)) {
+            const hasRetained = Object.keys(baseScheds[g]?.days || {}).some(d => d >= cutoffStr && !incomingCovered.has(d));
+            if (hasRetained) mergedGroups.push(g);
+        }
+    }
+
+    const mergedSchedules = {};
+    const allGroupKeys = new Set([...mergedGroups, ...Object.keys(baseScheds), ...Object.keys(incScheds)]);
+    for (const g of allGroupKeys) {
+        const mergedDays = {};
+        for (const [d, lessons] of Object.entries(baseScheds[g]?.days || {})) {
+            if (d >= cutoffStr && !incomingCovered.has(d)) mergedDays[d] = lessons;
+        }
+        for (const [d, lessons] of Object.entries(incScheds[g]?.days || {})) {
+            if (d >= cutoffStr) mergedDays[d] = lessons;
+        }
+        const sortedDays = {};
+        for (const d of Object.keys(mergedDays).sort()) {
+            sortedDays[d] = mergedDays[d];
+        }
+        if (incomingGroups.includes(g) || Object.keys(sortedDays).length > 0) {
+            mergedSchedules[g] = {
+                days: sortedDays,
+                availableDates: Object.keys(sortedDays)
+            };
+        }
+    }
+
+    const mergedCovered = Array.from(new Set([...baseCovered, ...incomingCovered])).filter(d => d >= cutoffStr).sort();
+    return {
+        ...baseData,
+        ...incomingData,
+        groups: mergedGroups,
+        coveredDates: mergedCovered,
+        schedules: mergedSchedules
+    };
+}
+
+function countRecentWorkdays(data, refTodayStr = getMskTodayStr()) {
+    const covered = collectCoveredDates(data);
+    const [y, m, d] = refTodayStr.split('-').map(Number);
+    const todayUtc = new Date(Date.UTC(y, m - 1, d));
+    let recentWorkdays = 0;
+    for (let offset = 0; offset < 7; offset++) {
+        const dt = new Date(todayUtc);
+        dt.setUTCDate(dt.getUTCDate() - offset);
+        if (dt.getUTCDay() !== 0 && covered.has(dt.toISOString().slice(0, 10))) {
+            recentWorkdays += 1;
+        }
+    }
+    return recentWorkdays;
+}
+
+function needsRecentCoverage(data, refTodayStr = getMskTodayStr()) {
+    const covered = collectCoveredDates(data);
+    const [y, m, d] = refTodayStr.split('-').map(Number);
+    const todayUtc = new Date(Date.UTC(y, m - 1, d));
+    if (todayUtc.getUTCDay() !== 0 && !covered.has(refTodayStr)) {
+        return true;
+    }
+    return countRecentWorkdays(data, refTodayStr) < 3;
 }
 
 module.exports = async function handler(req, res) {
@@ -303,7 +445,7 @@ module.exports = async function handler(req, res) {
 
         const diskData = await apiResp.json();
         const items = (diskData._embedded && diskData._embedded.items) || [];
-        const xlsxItems = items.filter(it => (it.name || '').toLowerCase().endsWith('.xlsx'));
+        const xlsxItems = items.filter(it => (it.name || '').toLowerCase().endsWith('.xlsx') && it.file);
 
         if (!xlsxItems.length) {
             return res.status(404).json({ error: 'No .xlsx files found on Yandex Disk' });
@@ -312,29 +454,40 @@ module.exports = async function handler(req, res) {
         // Sort latest first
         xlsxItems.sort((a, b) => new Date(b.modified || b.created).getTime() - new Date(a.modified || a.created).getTime());
         const latest = xlsxItems[0];
+        const latestSig = `${latest.name}|${latest.modified || latest.created || ''}`;
+        const todayStr = getMskTodayStr();
 
         const fileResp = await fetch(latest.file, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (!fileResp.ok) {
             return res.status(500).json({ error: `Failed to download ${latest.name}` });
         }
         const buffer = Buffer.from(await fileResp.arrayBuffer());
-        const parsed = parseWorkbook(buffer, latest.name);
+        const latestParsed = parseWorkbook(buffer, latest.name);
+        let merged = pruneScheduleData(latestParsed, HISTORY_RETENTION_DAYS, todayStr);
 
-        // Merge with weekly if single day
-        const availableDatesCount = Math.max(...Object.values(parsed.schedules).map(s => s.availableDates.length));
-        if (availableDatesCount < 4 && xlsxItems.length > 1) {
-            const weeklyCandidate = xlsxItems.find(it => it !== latest && (it.name.includes('-') || it.name.includes('–') || it.name.toLowerCase().includes('недел'))) || xlsxItems[1];
-            if (weeklyCandidate && weeklyCandidate.file) {
+        const [ty, tm, td] = todayStr.split('-').map(Number);
+        const isTodaySunday = new Date(Date.UTC(ty, tm - 1, td)).getUTCDay() === 0;
+        const latestMissesToday = !isTodaySunday && !collectCoveredDates(latestParsed).has(todayStr);
+
+        // Backfill past 7 days + today from recent Yandex.Disk files when latest starts from tomorrow or only covers partial days
+        if ((needsRecentCoverage(merged, todayStr) || latestMissesToday) && xlsxItems.length > 1) {
+            const olderParsedList = [];
+            for (const candidate of xlsxItems.slice(1, 4)) {
                 try {
-                    const secResp = await fetch(weeklyCandidate.file, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+                    const secResp = await fetch(candidate.file, { headers: { 'User-Agent': 'Mozilla/5.0' } });
                     if (secResp.ok) {
                         const secBuf = Buffer.from(await secResp.arrayBuffer());
-                        const secParsed = parseWorkbook(secBuf, weeklyCandidate.name);
-                        for (const g of parsed.groups) {
-                            if (secParsed.schedules[g]) {
-                                const merged = { ...secParsed.schedules[g].days, ...parsed.schedules[g].days };
-                                parsed.schedules[g].days = merged;
-                                parsed.schedules[g].availableDates = Object.keys(merged).sort();
+                        const secParsed = parseWorkbook(secBuf, candidate.name);
+                        if (secParsed && secParsed.groups && secParsed.groups.length > 0) {
+                            olderParsedList.push(secParsed);
+                            let rebuilt = null;
+                            for (let idx = olderParsedList.length - 1; idx >= 0; idx--) {
+                                rebuilt = mergeScheduleData(rebuilt, olderParsedList[idx], HISTORY_RETENTION_DAYS, todayStr);
+                            }
+                            merged = mergeScheduleData(rebuilt, latestParsed, HISTORY_RETENTION_DAYS, todayStr);
+                            const curMissesToday = !isTodaySunday && !collectCoveredDates(merged).has(todayStr);
+                            if (!curMissesToday && countRecentWorkdays(merged, todayStr) >= 5) {
+                                break;
                             }
                         }
                     }
@@ -346,9 +499,11 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({
             lastUpdated: Date.now(),
             fileName: latest.name,
+            sourceSignature: latestSig,
             yandexDiskUrl: PUBLIC_KEY,
-            groups: parsed.groups,
-            schedules: parsed.schedules
+            groups: merged.groups,
+            coveredDates: merged.coveredDates,
+            schedules: merged.schedules
         });
     } catch (e) {
         return res.status(500).json({ error: e.message || String(e) });
