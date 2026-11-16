@@ -909,7 +909,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v11') {
+        if (k !== 'mabiu-schedule-v12') {
           caches.delete(k);
         }
       });
@@ -965,7 +965,8 @@ async function initApp() {
   updateGroupLabelUI();
 
   updateSettingsLabels();
-  setupDaysCarousel();
+  selectedDateStr = getTodayDateStr();
+  setupDaysCarousel(true);
   renderLessons();
   startLiveTicker();
 
@@ -1050,10 +1051,27 @@ function updateSettingsLabels() {
 
 // --- Days Navigation & Carousel ---
 
+function findClosestDate(dates, targetDateStr) {
+  if (!dates || dates.length === 0) return targetDateStr;
+  if (dates.includes(targetDateStr)) return targetDateStr;
+  let closest = dates[0];
+  let minDiff = Math.abs(new Date(targetDateStr).getTime() - new Date(closest).getTime());
+  for (let i = 1; i < dates.length; i++) {
+    const diff = Math.abs(new Date(targetDateStr).getTime() - new Date(dates[i]).getTime());
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = dates[i];
+    }
+  }
+  return closest;
+}
+
 function getSortedAvailableDates() {
-  if (!scheduleData) return [getTodayDateStr()];
-  const groupSchedule = currentGroup ? scheduleData.schedules?.[currentGroup] : null;
+  const todayStr = getTodayDateStr();
   const dateSet = new Set();
+  dateSet.add(todayStr);
+
+  const groupSchedule = currentGroup ? scheduleData?.schedules?.[currentGroup] : null;
 
   // Include dates that have lessons or are in schedules
   if (groupSchedule && groupSchedule.days) {
@@ -1062,13 +1080,13 @@ function getSortedAvailableDates() {
     }
   }
 
-  // Also include the surrounding days of current week (Monday to Saturday)
+  // Also include the surrounding days of current week (Monday to Sunday - full 7 days)
   const today = new Date();
   const currentDow = today.getDay() === 0 ? 7 : today.getDay();
   const monday = new Date(today);
   monday.setDate(today.getDate() - (currentDow - 1));
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const y = d.getFullYear();
@@ -1081,16 +1099,16 @@ function getSortedAvailableDates() {
   return Array.from(dateSet).sort();
 }
 
-function setupDaysCarousel() {
+function setupDaysCarousel(preferToday = false) {
   const dates = getSortedAvailableDates();
   const todayStr = getTodayDateStr();
 
-  // If selectedDateStr is not in list, find closest or select today
-  if (!dates.includes(selectedDateStr)) {
+  // If preferToday is requested (app launch, group switch) or selectedDateStr is unset or invalid:
+  if (preferToday || !selectedDateStr || !dates.includes(selectedDateStr)) {
     if (dates.includes(todayStr)) {
       selectedDateStr = todayStr;
-    } else if (dates.length > 0) {
-      selectedDateStr = dates[0];
+    } else {
+      selectedDateStr = findClosestDate(dates, todayStr);
     }
   }
 
@@ -1126,13 +1144,15 @@ function setupDaysCarousel() {
     daysCarousel.appendChild(pill);
   });
 
-  // Scroll active pill into view smoothly
-  requestAnimationFrame(() => {
+  // Scroll active pill into view smoothly with a layout fallback
+  const scrollActiveIntoView = () => {
     const activePill = daysCarousel.querySelector('.day-pill.active');
     if (activePill) {
       activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }
-  });
+  };
+  requestAnimationFrame(scrollActiveIntoView);
+  setTimeout(scrollActiveIntoView, 80);
 }
 
 function selectDay(dateStr) {
@@ -1245,7 +1265,7 @@ function renderLessons() {
           <span class="pair-badge">${escapeHtml(lesson.pairNumber || 'Пара')}</span>
           <span class="pair-time">${escapeHtml(lesson.time || '')}</span>
         </div>
-        ${lesson.room ? `<span class="room-badge">${escapeHtml(lesson.room)}</span>` : ''}
+        ${lesson.room && !/^(?:Ауд\.?|АУд\.?)\s*$/i.test(lesson.room) ? `<span class="room-badge">${escapeHtml(lesson.room)}</span>` : ''}
       </div>
       <div class="lesson-subject-row">
         <div class="lesson-subject">${escapeHtml(lesson.cleanSubject || lesson.subject || 'Занятие')}</div>
@@ -1483,7 +1503,7 @@ function updateTickerOnce() {
       statusBadge.style.color = '#16a34a';
       statusBadge.style.backgroundColor = 'rgba(22, 163, 74, 0.14)';
       statusTitle.textContent = `Осталось ${formatDuration(diffMs)} (до ${p.endTimeStr})`;
-      statusSubtitle.textContent = `${p.lesson.pairNumber || 'Пара'}: ${p.lesson.cleanSubject || p.lesson.subject}${p.lesson.room ? ` (${p.lesson.room})` : ''}`;
+      statusSubtitle.textContent = `${p.lesson.pairNumber || 'Пара'}: ${p.lesson.cleanSubject || p.lesson.subject}${p.lesson.room && !/^(?:Ауд\.?|АУд\.?)\s*$/i.test(p.lesson.room) ? ` (${p.lesson.room})` : ''}`;
       return;
     }
   }
@@ -1586,7 +1606,8 @@ function setGroup(groupName) {
   localStorage.setItem('mabiu_group', currentGroup);
   updateGroupLabelUI();
 
-  setupDaysCarousel();
+  selectedDateStr = getTodayDateStr();
+  setupDaysCarousel(true);
   renderLessons();
   updateTickerOnce();
   showToast(`Выбрано направление: ${groupName}`);
@@ -1662,7 +1683,8 @@ async function handleManualFile(file) {
     }
 
     updateSettingsLabels();
-    setupDaysCarousel();
+    selectedDateStr = getTodayDateStr();
+    setupDaysCarousel(true);
     renderLessons();
     updateTickerOnce();
     closeSettingsModal();
@@ -1919,6 +1941,9 @@ function parseLessonContentClient(rawText) {
   if (roomMatch) {
     room = roomMatch[0].replace(/^,\s*/, '').trim();
     text = text.substring(0, text.length - roomMatch[0].length).trim();
+    if (/^(?:Ауд\.?|АУд\.?)\s*$/i.test(room)) {
+      room = '';
+    }
   }
 
   // Extract and strip lesson-type parentheticals (e.g. "(Лекция)", "(Практическое занятие)")
@@ -2162,7 +2187,8 @@ async function resetSchedule() {
         updateGroupLabelUI();
       }
       updateSettingsLabels();
-      setupDaysCarousel();
+      selectedDateStr = getTodayDateStr();
+      setupDaysCarousel(true);
       renderLessons();
       updateTickerOnce();
       closeSettingsModal();
