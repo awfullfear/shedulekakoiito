@@ -11,6 +11,7 @@
  */
 
 // Configuration & State
+const CURRENT_DATA_VERSION = 'v13';
 const CONFIG = {
   yandexPublicKey: 'https://disk.yandex.ru/d/7XafcYMVe1ec7g',
   yandexKeyId: '7XafcYMVe1ec7g',
@@ -222,15 +223,42 @@ function mergeScheduleData(baseData, incomingData, options = {}) {
     ? incomingData.sourceSignature
     : baseData.sourceSignature;
 
+  const mergedLastUpdated = incomingData.lastUpdated
+    ? incomingData.lastUpdated
+    : Math.max(baseData.lastUpdated || 0, Date.now());
+
   return {
     ...baseData,
     ...incomingData,
-    lastUpdated: Math.max(baseData.lastUpdated || 0, incomingData.lastUpdated || 0),
+    lastUpdated: mergedLastUpdated,
     groups: mergedGroups,
     coveredDates: mergedCovered,
     sourceSignature: mergedSourceSignature,
     schedules: mergedSchedules
   };
+}
+
+function hasBetterRoomCoverage(existingData, freshData) {
+  if (!freshData || !freshData.schedules) return false;
+  if (!existingData || !existingData.schedules) return true;
+  for (const grp of Object.keys(freshData.schedules)) {
+    const fDays = freshData.schedules[grp]?.days || {};
+    const eDays = existingData.schedules[grp]?.days || {};
+    for (const d of Object.keys(fDays)) {
+      const fLessons = fDays[d] || [];
+      const eLessons = eDays[d] || [];
+      for (let i = 0; i < fLessons.length; i++) {
+        const fRoom = String(fLessons[i]?.room || '').trim();
+        const eRoom = String(eLessons[i]?.room || '').trim();
+        if (fRoom && !/^(?:Ауд\.?|АУд\.?)\s*$/i.test(fRoom)) {
+          if (!eRoom || /^(?:Ауд\.?|АУд\.?)\s*$/i.test(eRoom)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
 }
 
 function countRecentWorkdays(data, refTodayStr = getTodayDateStr()) {
@@ -909,11 +937,18 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v12') {
+        if (k !== 'mabiu-schedule-v13') {
           caches.delete(k);
         }
       });
     }).catch(() => {});
+  }
+
+  // Cache version migration: force purge stale localStorage schedule data from older versions
+  if (localStorage.getItem('mabiu_data_version') !== CURRENT_DATA_VERSION) {
+    localStorage.removeItem('mabiu_schedule_data');
+    localStorage.setItem('mabiu_data_version', CURRENT_DATA_VERSION);
+    scheduleData = null;
   }
 
   // 1. Try loading cached schedule from localStorage (preserving 7-day rolling history)
@@ -1000,9 +1035,17 @@ async function initApp() {
       const freshHasSchedules = Boolean(
         bestFresh && bestFresh.schedules && Object.keys(bestFresh.schedules).length > 0
       );
+      const hasBetterRooms = hasBetterRoomCoverage(scheduleData, bestFresh);
+      const isNewer = Boolean(bestFresh?.lastUpdated && bestFresh.lastUpdated > (scheduleData?.lastUpdated || 0));
+      const isDifferentFile = Boolean(bestFresh?.fileName && bestFresh.fileName !== scheduleData?.fileName);
+      const isDifferentSig = Boolean(bestFresh?.sourceSignature && bestFresh.sourceSignature !== scheduleData?.sourceSignature);
+
       const shouldUpdate = freshHasSchedules && (
         !hasExistingSchedules ||
-        (bestFresh.lastUpdated && bestFresh.lastUpdated > (scheduleData.lastUpdated || 0))
+        hasBetterRooms ||
+        isNewer ||
+        isDifferentFile ||
+        isDifferentSig
       );
 
       if (shouldUpdate) {
@@ -1936,11 +1979,13 @@ function parseLessonContentClient(rawText) {
   let teacher = '';
   let lessonType = '';
 
-  // Extract room from end first
-  const roomMatch = text.match(/(?:,\s*)?(?:(?:Ауд\.?|АУд\.?)\s*[\w\d/]*\s*(?:\([^)]+\))?|(?:Актовый\s*зал|Конференц[- ]*зал|Спорт\.?\s*зал|Он[- ]*лайн|ДО)(?:\s*\([^)]+\))?|\((?:Конференц[- ]*зал|Актовый\s*зал)\))\s*$/i);
+  // Extract room from end first (supports alphanumeric, Cyrillic, slashes, trailing dots like "Ауд 117.")
+  const roomMatch = text.match(/(?:,\s*)?(?:(?:Ауд\.?|АУд\.?)\s*[\w\d/а-яёА-ЯЁ.-]*\s*(?:\([^)]+\))?|(?:Актовый\s*зал|Конференц[- ]*зал|Спорт\.?\s*зал|Он[- ]*лайн|ДО)(?:\s*\([^)]+\))?|\((?:Конференц[- ]*зал|Актовый\s*зал)\))\s*$/i);
   if (roomMatch) {
     room = roomMatch[0].replace(/^,\s*/, '').trim();
     text = text.substring(0, text.length - roomMatch[0].length).trim();
+    // Strip trailing period after digits (e.g. "Ауд 117." -> "Ауд 117")
+    room = room.replace(/(\d+)\.+$/, '$1').trim();
     if (/^(?:Ауд\.?|АУд\.?)\s*$/i.test(room)) {
       room = '';
     }
@@ -1958,6 +2003,8 @@ function parseLessonContentClient(rawText) {
   if (teacherMatch) {
     teacher = teacherMatch[1].trim();
     text = text.substring(0, text.length - teacherMatch[0].length).trim();
+    // Normalize excessive dots at end of teacher (e.g. "Синкина Е.В.." -> "Синкина Е.В.")
+    teacher = teacher.replace(/\.{2,}$/, '.').trim();
   }
 
   // Subject is cleaned remainder
@@ -2142,6 +2189,27 @@ async function checkYandexDiskUpdates(isManual = false) {
       }
     }
 
+    // 3. Fallback: check and reload bundled schedule.json from repository if direct Yandex Disk check didn't produce updates
+    if (!nextSchedule) {
+      try {
+        let repoResp = await fetch(`./schedule.json?_t=${Date.now()}`);
+        if (!repoResp.ok) repoResp = await fetch(`./data/schedule.json?_t=${Date.now()}`);
+        if (repoResp.ok) {
+          const repoData = await repoResp.json();
+          if (repoData && repoData.groups && repoData.schedules) {
+            const hasBetter = hasBetterRoomCoverage(scheduleData, repoData);
+            const isNewer = Boolean(repoData.lastUpdated && repoData.lastUpdated > (scheduleData?.lastUpdated || 0));
+            const isDiffFile = Boolean(repoData.fileName && repoData.fileName !== scheduleData?.fileName);
+            const isDiffSig = Boolean(repoData.sourceSignature && repoData.sourceSignature !== scheduleData?.sourceSignature);
+            if (hasBetter || isNewer || isDiffFile || isDiffSig || isManual) {
+              const prunedRepo = pruneScheduleData(normalizeScheduleData(repoData));
+              nextSchedule = mergeScheduleData(scheduleData, prunedRepo);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     if (nextSchedule && nextSchedule.groups && nextSchedule.groups.length > 0) {
       scheduleData = pruneScheduleData(normalizeScheduleData(nextSchedule));
       saveScheduleDataSafe(scheduleData);
@@ -2158,7 +2226,7 @@ async function checkYandexDiskUpdates(isManual = false) {
         renderGroupList(groupSearchInput ? groupSearchInput.value : '');
       }
 
-      if (isManual) showToast('Расписание успешно обновлено с Яндекс.Диска!');
+      if (isManual) showToast('Расписание успешно обновлено!');
     } else {
       if (isManual) showToast('Расписание актуально.');
     }
@@ -2176,8 +2244,8 @@ async function resetSchedule() {
   localStorage.removeItem('mabiu_schedule_data');
   showToast('Сброс к исходному расписанию...');
   try {
-    let resp = await fetch('./schedule.json');
-    if (!resp.ok) resp = await fetch('./data/schedule.json');
+    let resp = await fetch(`./schedule.json?_t=${Date.now()}`);
+    if (!resp.ok) resp = await fetch(`./data/schedule.json?_t=${Date.now()}`);
     if (resp.ok) {
       scheduleData = pruneScheduleData(normalizeScheduleData(await resp.json()));
       saveScheduleDataSafe(scheduleData);
