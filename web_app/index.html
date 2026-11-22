@@ -20,7 +20,7 @@
   <link rel="manifest" href="./manifest.json">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="./style.css?v=13">
+  <link rel="stylesheet" href="./style.css?v=14">
 </head>
 <body>
   <div class="app-container">
@@ -210,6 +210,71 @@
           </div>
         </div>
 
+        <!-- Changelog / Updates Section -->
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <span class="settings-section-title">Что нового</span>
+            <span class="changelog-pill">v14 · 23.11</span>
+          </div>
+          <div class="settings-card changelog-card">
+            <div class="changelog-entry current">
+              <div class="changelog-entry-header">
+                <span class="changelog-version-tag">v14</span>
+                <span class="changelog-date">23 ноября 2026</span>
+                <span class="changelog-current-badge">Актуально</span>
+              </div>
+              <ul class="changelog-list">
+                <li>Загружено новое расписание на неделю 23.11–28.11 (<code>23.11-28.11.2026.xlsx</code>).</li>
+                <li>Добавлены аудитории на 23 ноября: Введение в языкознание (5 и 6 пары) — Ауд. 335.</li>
+                <li>Сохранена история пар за предыдущую неделю (16.11–21.11).</li>
+              </ul>
+            </div>
+
+            <details class="changelog-archive">
+              <summary class="changelog-archive-summary">
+                <span>Предыдущие обновления</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <div class="changelog-archive-content">
+                <div class="changelog-entry">
+                  <div class="changelog-entry-header">
+                    <span class="changelog-version-tag">v13</span>
+                    <span class="changelog-date">19 ноября 2026</span>
+                  </div>
+                  <ul class="changelog-list">
+                    <li>Исправлено отображение аудиторий для пар по языкознанию и истории.</li>
+                    <li>Автоматический сброс устаревшего кэша расписания в браузере.</li>
+                    <li>Очистка лишних точек в ФИО преподавателей.</li>
+                  </ul>
+                </div>
+                <div class="changelog-entry">
+                  <div class="changelog-entry-header">
+                    <span class="changelog-version-tag">v12</span>
+                    <span class="changelog-date">18 ноября 2026</span>
+                  </div>
+                  <ul class="changelog-list">
+                    <li>Сохранение расписания на 7 дней (прошедшие дни не пропадают при обновлении).</li>
+                    <li>Опция отключения смайликов темы в настройках.</li>
+                    <li>Удаление пометок (Лекция) и (Практика) из названий предметов.</li>
+                  </ul>
+                </div>
+                <div class="changelog-entry">
+                  <div class="changelog-entry-header">
+                    <span class="changelog-version-tag">v11</span>
+                    <span class="changelog-date">17 ноября 2026</span>
+                  </div>
+                  <ul class="changelog-list">
+                    <li>Автопереход на ячейку сегодняшнего дня при открытии расписания.</li>
+                    <li>Серое затемнение завершённых пар прошлых дней.</li>
+                  </ul>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+
         <!-- Info / Add to Home screen tip -->
         <div class="settings-info-text">
           💡 <strong>Для iPhone:</strong> Нажмите кнопку «Поделиться» (квадрат со стрелкой вверх) в Safari и выберите <strong>«На экран Домой»</strong>, чтобы открывать расписание как приложение без рамок браузера.
@@ -227,6 +292,6 @@
   <!-- SheetJS for local parsing of .xlsx on client -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Main Application Logic -->
-  <script src="./app.js?v=13"></script>
+  <script src="./app.js?v=14"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@
  */
 
 // Configuration & State
-const CURRENT_DATA_VERSION = 'v13';
+const CURRENT_DATA_VERSION = 'v14';
 const CONFIG = {
   yandexPublicKey: 'https://disk.yandex.ru/d/7XafcYMVe1ec7g',
   yandexKeyId: '7XafcYMVe1ec7g',
@@ -937,7 +937,7 @@ async function initApp() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((k) => {
-        if (k !== 'mabiu-schedule-v13') {
+        if (k !== 'mabiu-schedule-v14') {
           caches.delete(k);
         }
       });
